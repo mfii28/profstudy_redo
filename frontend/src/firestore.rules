@@ -1,0 +1,459 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- Helper Functions ---
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Helper to check if the current user is an admin or superadmin.
+    // Checks Firebase Auth custom claims first (zero Firestore reads at auth token
+    // verification time). Falls back to a document lookup for users whose role
+    // has not yet been promoted to a custom claim (legacy support during migration).
+    function isAdmin() {
+      let hasClaimRole = isAuthenticated() &&
+        (request.auth.token.get('role', '') in ['admin', 'superadmin', 'subadmin']);
+
+      let userDocPath = /databases/$(database)/documents/users/$(request.auth.uid);
+      let hasDocRole = isAuthenticated() &&
+        exists(userDocPath) &&
+        get(userDocPath).data.role in ['admin', 'superadmin', 'subadmin'];
+
+      return hasClaimRole || hasDocRole;
+    }
+
+    // --- Rules ---
+
+    match /users/{userId} {
+      function hasOnlyAllowedUserChanges() {
+        return request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          'name',
+          'avatar',
+          'bio',
+          'address',
+          'preferences',
+          'lastActive',
+          'studyStreak',
+          'pointsSpent',
+          'wishlistCourseIds',
+          'aiUsage',
+          'tutorDetails'
+        ]);
+      }
+
+      function hasOnlyAllowedTutorDetailsChanges() {
+        return !('tutorDetails' in request.resource.data) || !('tutorDetails' in resource.data)
+          || request.resource.data.tutorDetails.diff(resource.data.tutorDetails).changedKeys().hasOnly([
+            'totalStudents',
+            'avgRating',
+            'coursesTaught',
+            'verificationStatus',
+            'idCardUrl',
+            'certificationUrl'
+          ]);
+      }
+
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isOwner(userId) && (
+        request.resource.data.role == 'student' && request.resource.data.status == 'active'
+      );
+      allow update: if (
+        isOwner(userId) && 
+        request.resource.data.role == resource.data.role && 
+        request.resource.data.status == resource.data.status &&
+        hasOnlyAllowedUserChanges() &&
+        hasOnlyAllowedTutorDetailsChanges()
+      ) || isAdmin();
+      allow delete: if isAdmin() && request.auth.uid != userId;
+
+      // User-specific subcollections
+      match /cart/{cartItemId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId);
+        allow update, delete: if isOwner(userId) || isAdmin();
+      }
+
+      match /activeSessions/{sessionId} {
+        allow get, list, create, update, delete: if isOwner(userId) || isAdmin();
+      }
+      
+      match /weeklyStudyData/{dataId} {
+        allow read: if isOwner(userId) || isAdmin();
+      }
+      
+      match /subjectMasteryData/{dataId} {
+        allow read: if isOwner(userId) || isAdmin();
+      }
+    }
+
+    match /courses/{courseId} {
+      function tutorOwnsCourse() {
+        return isAuthenticated() && (
+          resource.data.tutorId == request.auth.uid ||
+          resource.data.createdByTutorId == request.auth.uid ||
+          (resource.data.assignedTutorIds is list && request.auth.uid in resource.data.assignedTutorIds)
+        );
+      }
+      function isSuperAdminRole() {
+        let userDocPath = /databases/$(database)/documents/users/$(request.auth.uid);
+        return isAuthenticated() && exists(userDocPath) && get(userDocPath).data.role == 'superadmin';
+      }
+      function pricingNotAffected() {
+        return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['price', 'isFree']);
+      }
+      function newDocHasNoPrice() {
+        return !('price' in request.resource.data) && !('isFree' in request.resource.data);
+      }
+      allow read: if resource.data.status in ['Published', 'published'] || isAdmin() || tutorOwnsCourse();
+      allow create: if isSuperAdminRole() ||
+                       (isAuthenticated() && newDocHasNoPrice() &&
+                        (isAdmin() || request.resource.data.tutorId == request.auth.uid || request.resource.data.createdByTutorId == request.auth.uid));
+      allow update: if isSuperAdminRole() ||
+                       ((isAdmin() || tutorOwnsCourse()) && pricingNotAffected());
+      allow delete: if isAdmin() || tutorOwnsCourse();
+    }
+
+    match /liveClasses/{classId} {
+      // Read restricted to authenticated users only — Zoom URLs are never exposed here.
+      allow read: if isAuthenticated();
+      allow create: if isAdmin() || (isAuthenticated() && request.resource.data.instructorId == request.auth.uid);
+      allow update, delete: if isAdmin() || (isAuthenticated() && resource.data.instructorId == request.auth.uid);
+    }
+
+    match /liveClassUrls/{classId} {
+      // Join URLs are NEVER readable by clients. Only accessible via admin SDK in server actions.
+      allow read, write: if false;
+    }
+
+    match /affiliates/{affiliateId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && affiliateId == 'aff-' + request.auth.uid;
+      // Allow the affiliate themselves, an admin, OR a student referred by this affiliate to update (for rewards)
+      allow update: if isAdmin() || (
+        isAuthenticated() && (
+          affiliateId == 'aff-' + request.auth.uid ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.referredBy == affiliateId
+        )
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /libraryAssets/{assetId} {
+      allow read: if isAuthenticated() && (isAdmin() || resource.data.tutorId == request.auth.uid);
+      allow create: if isAuthenticated() && (isAdmin() || request.resource.data.tutorId == request.auth.uid);
+      allow update, delete: if isAuthenticated() && (isAdmin() || resource.data.tutorId == request.auth.uid);
+    }
+    
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /books/{bookId} {
+      allow read: if resource.data.status in ['Published', 'published'] || isAdmin();
+      allow write: if isAdmin();
+    }
+    
+    match /roles/{roleId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /courseCategories/{categoryId} {
+        allow read: if true;
+        allow write: if isAdmin();
+    }
+
+    match /courseBundles/{bundleId} {
+        allow read: if true;
+        allow write: if isAdmin();
+    }
+
+    match /assignments/{assignmentId} {
+        allow read: if isAdmin() || isOwner(resource.data.userId);
+        allow create: if isAuthenticated() && isOwner(request.resource.data.userId);
+        allow update: if isAdmin() || isOwner(resource.data.userId);
+        allow delete: if isAdmin();
+    }
+
+    match /notes/{noteId} {
+        allow read: if isOwner(resource.data.userId);
+        allow create: if isAuthenticated() && isOwner(request.resource.data.userId);
+        allow update, delete: if isOwner(resource.data.userId);
+    }
+    
+    match /orders/{orderId} {
+        allow read: if isAdmin() || isOwner(resource.data.userId);
+        // Orders are fulfillment artifacts written by trusted server code.
+        allow create, update: if isAdmin();
+        allow delete: if isAdmin();
+    }
+
+    match /ip_blocklist/{blockId} {
+        allow read, create, update, delete: if isAdmin();
+    }
+
+    match /supportTickets/{ticketId} {
+      allow read, update: if isAdmin() || isOwner(resource.data.userId);
+      allow create: if isAuthenticated() && isOwner(request.resource.data.userId);
+    }
+
+    match /notifications/{notificationId} {
+      allow read, update: if isOwner(resource.data.userId) || isAdmin();
+      allow create: if isOwner(request.resource.data.userId) || isAdmin();
+    }
+
+    match /contactInquiries/{inquiryId} {
+      // Public-facing form - accepts submissions from unauthenticated users.
+      allow create: if true;
+      // Only admins can list or read inquiries
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /instructorApplications/{applicationId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /platformContent/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /siteContent/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /platformSettings/{settingId} {
+        allow read: if isAuthenticated();
+        allow write: if isAdmin();
+    }
+
+    match /reviews/{reviewId} {
+        allow read: if true;
+        allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+        allow update, delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    match /announcements/{announcementId} {
+        allow read: if true;
+      allow create: if isAdmin() || (isAuthenticated() && request.resource.data.authorId == request.auth.uid);
+      allow update, delete: if isAdmin() || (isAuthenticated() && resource.data.authorId == request.auth.uid);
+    }
+
+    match /blogPosts/{postId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /discussionThreads/{threadId} {
+        // Authenticated users only — prevents anonymous scraping of course discussions
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated();
+        allow update: if isAdmin() || isOwner(resource.data.authorId);
+        allow delete: if isAdmin();
+    }
+
+    match /discussionMessages/{messageId} {
+        // Authenticated users only — consistent with thread access
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated();
+        allow update, delete: if isAdmin() || isOwner(resource.data.authorId);
+    }
+
+    match /conversations/{conversationId} {
+      function isConversationParticipant() {
+        return isAuthenticated() && request.auth.uid in resource.data.participantIds;
+      }
+      function isCreateParticipant() {
+        return isAuthenticated() &&
+          request.resource.data.participantIds is list &&
+          request.resource.data.participantIds.size() == 2 &&
+          request.auth.uid in request.resource.data.participantIds;
+      }
+      allow read: if isConversationParticipant() || isAdmin();
+      allow create: if isCreateParticipant() || isAdmin();
+      allow update: if isConversationParticipant() || isAdmin();
+      allow delete: if isAdmin();
+
+      match /messages/{messageId} {
+        function conversationExistsAndParticipant() {
+          let conversationRef = /databases/$(database)/documents/conversations/$(conversationId);
+          return isAuthenticated() &&
+            exists(conversationRef) &&
+            request.auth.uid in get(conversationRef).data.participantIds;
+        }
+        allow read: if conversationExistsAndParticipant() || isAdmin();
+        allow create: if conversationExistsAndParticipant()
+          && request.resource.data.senderId == request.auth.uid;
+        allow update, delete: if isAdmin() || (conversationExistsAndParticipant() && resource.data.senderId == request.auth.uid);
+      }
+    }
+
+    match /auditLogs/{logId} {
+        allow read: if isAdmin();
+        allow write: if isAdmin();
+    }
+
+    match /classrooms/{classroomId} {
+      function isEnrolledInClassroom() {
+        // Migration safety: if enrolledStudentIds hasn't been written yet (legacy
+        // classroom documents pre-dating this feature), we fall through and allow
+        // access rather than silently blocking enrolled students. Once all classroom
+        // documents have been synced/recreated the field will always be present.
+        return !('enrolledStudentIds' in resource.data)
+            || request.auth.uid in resource.data.enrolledStudentIds;
+      }
+      function isClassroomMember() {
+        return isAuthenticated() && (
+          isAdmin() ||
+          resource.data.tutorId == request.auth.uid ||
+          isEnrolledInClassroom()
+        );
+      }
+      allow read: if isClassroomMember() || isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /classroomMessages/{messageId} {
+      function isEnrolledInClassroomData(classroomData) {
+        // Migration safety: same fallback as the classrooms rule above.
+        return !('enrolledStudentIds' in classroomData)
+            || request.auth.uid in classroomData.enrolledStudentIds;
+      }
+      function canReadMessage() {
+        let classroomRef = /databases/$(database)/documents/classrooms/$(resource.data.classroomId);
+        let classroomData = get(classroomRef).data;
+        return isAuthenticated() && (
+          isAdmin() ||
+          classroomData.tutorId == request.auth.uid ||
+          isEnrolledInClassroomData(classroomData)
+        );
+      }
+      function canSendMessage() {
+        let classroomRef = /databases/$(database)/documents/classrooms/$(request.resource.data.classroomId);
+        let classroomData = get(classroomRef).data;
+        return isAuthenticated() &&
+          request.resource.data.userId == request.auth.uid && (
+          isAdmin() ||
+          classroomData.tutorId == request.auth.uid ||
+          isEnrolledInClassroomData(classroomData)
+        );
+      }
+      allow read: if canReadMessage();
+      allow create: if canSendMessage();
+      allow update, delete: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+    }
+
+    match /payoutRequests/{requestId} {
+        function isTutorRequest() {
+            return request.resource.data.tutorId == request.auth.uid
+                && request.resource.data.status == 'pending'
+                && !('reviewedAt' in request.resource.data)
+                && !('adminNote' in request.resource.data)
+                && !('reviewedBy' in request.resource.data);
+        }
+        allow read: if isAdmin() || (isAuthenticated() && resource.data.tutorId == request.auth.uid);
+        allow create: if isAuthenticated() && isTutorRequest();
+        allow update: if isAdmin();
+        allow delete: if isAdmin();
+    }
+
+    match /classroomPresence/{presenceId} {
+      function isInClassroom(classroomId) {
+        let classroomRef = /databases/$(database)/documents/classrooms/$(classroomId);
+        let classroomData = get(classroomRef).data;
+        return isAuthenticated() && (
+          isAdmin() ||
+          classroomData.tutorId == request.auth.uid ||
+          request.auth.uid in classroomData.enrolledStudentIds
+        );
+      }
+      allow read: if isAuthenticated() && isInClassroom(resource.data.classroomId);
+      allow create, update: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow delete: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+    }
+
+    match /threadMessages/{messageId} {
+      function isEnrolledInClassroomData(classroomData) {
+        return !('enrolledStudentIds' in classroomData)
+            || request.auth.uid in classroomData.enrolledStudentIds;
+      }
+      function canReadThreadMessage() {
+        let classroomRef = /databases/$(database)/documents/classrooms/$(resource.data.classroomId);
+        let classroomData = get(classroomRef).data;
+        return isAuthenticated() && (
+          isAdmin() ||
+          classroomData.tutorId == request.auth.uid ||
+          isEnrolledInClassroomData(classroomData)
+        );
+      }
+      function canSendThreadMessage() {
+        let classroomRef = /databases/$(database)/documents/classrooms/$(request.resource.data.classroomId);
+        let classroomData = get(classroomRef).data;
+        return isAuthenticated() &&
+          request.resource.data.userId == request.auth.uid && (
+          isAdmin() ||
+          classroomData.tutorId == request.auth.uid ||
+          isEnrolledInClassroomData(classroomData)
+        );
+      }
+      allow read: if canReadThreadMessage();
+      allow create: if canSendThreadMessage();
+      allow update, delete: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+    }
+
+    // Student achievements — read by owner or admin; written by Admin SDK only.
+    match /achievements/{achievementId} {
+        allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+        allow write: if false; // Admin SDK only
+    }
+
+    // Affiliate commission records — written by Admin SDK (server-only) after payment fulfillment.
+    // Affiliates can read their own commissions; admins can read/write all.
+    match /affiliateCommissions/{commissionId} {
+        allow read: if isAdmin() || (
+            isAuthenticated() &&
+            resource.data.affiliateId == 'aff-' + request.auth.uid
+        );
+        allow write: if false; // Admin SDK only
+    }
+
+    // Payment fulfillment idempotency records — written exclusively by Admin SDK.
+    match /paymentFulfillments/{reference} {
+        allow read: if isAdmin();
+        allow write: if false; // Admin SDK only
+    }
+
+    // Book purchases — users can read their own; all writes via Admin SDK only.
+    match /bookPurchases/{purchaseId} {
+        allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+        allow write: if false; // Admin SDK only
+    }
+
+    match /testimonials/{testimonialId} {
+      function isApprovedTestimonial() {
+        return !('status' in resource.data) || resource.data.status == 'approved';
+      }
+      allow read: if isApprovedTestimonial() || isAdmin();
+      allow create: if false; // User submissions via Admin SDK server action
+      allow update, delete: if isAdmin();
+    }
+
+    match /galleryItems/{itemId} {
+      allow read: if resource.data.status == 'published' || isAdmin();
+      allow write: if isAdmin();
+    }
+
+  }
+}

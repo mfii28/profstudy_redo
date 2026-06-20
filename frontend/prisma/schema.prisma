@@ -1,0 +1,296 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id                 String              @id // Matches Firebase Auth UID or NextAuth provider ID
+  email              String              @unique
+  name               String?
+  avatar             String?
+  bio                String?
+  address            String?
+  role               String              @default("student") // student, tutor, admin, superadmin, subadmin
+  status             String              @default("active")  // active, suspended
+  lastActive         DateTime?
+  studyStreak        Int                 @default(0)
+  pointsSpent        Int                 @default(0)
+  referredBy         String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  // Relations
+  tutorDetails       TutorDetail?
+  cartItems          CartItem[]
+  activeSessions     ActiveSession[]
+  orders             Order[]
+  assignments        Assignment[]
+  notes              Note[]
+  reviews            Review[]
+  discussionThreads  DiscussionThread[]
+  discussionMessages DiscussionMessage[]
+  sentMessages       Message[]
+  classroomMessages  ClassroomMessage[]
+  classroomPresence  ClassroomPresence[]
+  achievements       Achievement[]
+  bookPurchases      BookPurchase[]
+  supportTickets     SupportTicket[]
+  notifications      Notification[]
+}
+
+model TutorDetail {
+  id                 String              @id @default(cuid())
+  userId             String              @unique
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  totalStudents      Int                 @default(0)
+  avgRating          Float               @default(0.0)
+  verificationStatus String              @default("pending") // pending, approved, rejected
+  idCardUrl          String?
+  certificationUrl   String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  // Relations
+  courses            Course[]
+  payoutRequests     PayoutRequest[]
+}
+
+model CartItem {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseId  String?
+  bookId    String?
+  createdAt DateTime @default(now())
+}
+
+model ActiveSession {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model Course {
+  id          String         @id @default(cuid())
+  title       String
+  description String?
+  price       Float?
+  isFree      Boolean        @default(false)
+  status      String         @default("Draft") // Draft, Published
+  tutorId     String
+  tutor       TutorDetail    @relation(fields: [tutorId], references: [id], onDelete: Cascade)
+  categoryId  String?
+  category    CourseCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  ragSources  CourseRagSource[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+}
+
+model CourseCategory {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  courses   Course[]
+  createdAt DateTime @default(now())
+}
+
+model Order {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount    Float
+  status    String   @default("pending") // pending, completed, failed
+  reference String   @unique             // Paystack reference
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model LiveClass {
+  id           String   @id @default(cuid())
+  title        String
+  instructorId String
+  startTime    DateTime
+  meetingId    String?
+  joinUrl      String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Book {
+  id        String         @id @default(cuid())
+  title     String
+  price     Float
+  status    String         @default("Draft") // Draft, Published
+  purchases BookPurchase[]
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+}
+
+model BookPurchase {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookId    String
+  book      Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model Assignment {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  content   String
+  status    String   @default("pending") // pending, submitted, graded
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Note {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseId  String
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now())
+}
+
+model DiscussionThread {
+  id        String              @id @default(cuid())
+  title     String
+  content   String
+  authorId  String
+  author    User                @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  messages  DiscussionMessage[]
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+}
+
+model DiscussionMessage {
+  id        String           @id @default(cuid())
+  threadId  String
+  thread    DiscussionThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User             @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  content   String
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+}
+
+model Conversation {
+  id             String    @id @default(cuid())
+  participantIds String[]  // Array of 2 UIDs
+  messages       Message[]
+  createdAt      DateTime  @default(now())
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  content        String
+  createdAt      DateTime     @default(now())
+}
+
+model Classroom {
+  id                 String              @id @default(cuid())
+  name               String
+  tutorId            String
+  enrolledStudentIds String[]            // Array of student UIDs
+  messages           ClassroomMessage[]
+  presence           ClassroomPresence[]
+  createdAt          DateTime            @default(now())
+}
+
+model ClassroomMessage {
+  id          String    @id @default(cuid())
+  classroomId String
+  classroom   Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  content     String
+  createdAt   DateTime  @default(now())
+}
+
+model ClassroomPresence {
+  id          String    @id @default(cuid())
+  classroomId String
+  classroom   Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastActive  DateTime  @default(now())
+}
+
+model PayoutRequest {
+  id         String      @id @default(cuid())
+  tutorId    String
+  tutor      TutorDetail @relation(fields: [tutorId], references: [id], onDelete: Cascade)
+  amount     Float
+  status     String      @default("pending") // pending, approved, rejected
+  adminNote  String?
+  reviewedBy String?
+  reviewedAt DateTime?
+  createdAt  DateTime    @default(now())
+}
+
+model Achievement {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  badgeUrl  String
+  createdAt DateTime @default(now())
+}
+
+model SupportTicket {
+  id          String   @id @default(cuid())
+  userId      String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  description String
+  status      String   @default("open") // open, closed
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model CourseRagSource {
+  id          String   @id @default(cuid())
+  courseId    String
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  sourceFile  String
+  contentHash String
+  chunkCount  Int      @default(1)
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@unique([courseId, sourceFile])
+}

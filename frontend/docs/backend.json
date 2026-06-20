@@ -1,0 +1,191 @@
+{
+  "entities": {
+    "ContactInquiry": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ContactInquiry",
+      "type": "object",
+      "description": "Represents a message submitted by a user through the contact form, used for support or general inquiries.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the ContactInquiry entity."
+        },
+        "name": {
+          "type": "string",
+          "description": "The full name of the user submitting the inquiry."
+        },
+        "email": {
+          "type": "string",
+          "description": "The email address of the user for follow-up communication.",
+          "format": "email"
+        },
+        "subject": {
+          "type": "string",
+          "description": "The subject line or topic of the inquiry."
+        },
+        "message": {
+          "type": "string",
+          "description": "The detailed message or question from the user."
+        },
+        "submittedAt": {
+          "type": "string",
+          "description": "Timestamp when the inquiry was submitted.",
+          "format": "date-time"
+        },
+        "status": {
+          "type": "string",
+          "description": "The current status of the inquiry (e.g., Pending, Resolved, Archived).",
+          "items": {
+            "type": "string"
+          }
+        },
+        "resolvedAt": {
+          "type": "string",
+          "description": "Timestamp when the inquiry was marked as resolved.",
+          "format": "date-time"
+        },
+        "adminNotes": {
+          "type": "string",
+          "description": "Internal notes added by an administrator regarding the inquiry."
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "email",
+        "subject",
+        "message",
+        "submittedAt",
+        "status"
+      ]
+    },
+    "InstructorApplication": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "InstructorApplication",
+      "type": "object",
+      "description": "Represents an application submitted by an individual interested in becoming a tutor or instructor on the platform.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the InstructorApplication entity."
+        },
+        "fullName": {
+          "type": "string",
+          "description": "The full name of the applicant."
+        },
+        "email": {
+          "type": "string",
+          "description": "The email address of the applicant for communication.",
+          "format": "email"
+        },
+        "phoneNumber": {
+          "type": "string",
+          "description": "The phone number of the applicant."
+        },
+        "linkedinProfileUrl": {
+          "type": "string",
+          "description": "URL to the applicant's LinkedIn profile for professional background verification.",
+          "format": "uri"
+        },
+        "portfolioUrl": {
+          "type": "string",
+          "description": "URL to the applicant's teaching portfolio or relevant work samples.",
+          "format": "uri"
+        },
+        "teachingExperienceDescription": {
+          "type": "string",
+          "description": "A detailed description of the applicant's teaching experience and qualifications."
+        },
+        "proposedCourseTopics": {
+          "type": "array",
+          "description": "A list of course topics or subjects the applicant is interested in teaching.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "motivationStatement": {
+          "type": "string",
+          "description": "The applicant's statement of motivation for joining StudyMate as an instructor."
+        },
+        "submittedAt": {
+          "type": "string",
+          "description": "Timestamp when the application was submitted.",
+          "format": "date-time"
+        },
+        "status": {
+          "type": "string",
+          "description": "The current status of the application (e.g., Pending, Under Review, Approved, Rejected, Withdrawn).",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reviewerId": {
+          "type": "string",
+          "description": "Reference to the unique identifier of the administrative user who reviewed the application. (Relationship: AdminUser 1:N InstructorApplication)"
+        },
+        "reviewedAt": {
+          "type": "string",
+          "description": "Timestamp when the application was reviewed by an administrator.",
+          "format": "date-time"
+        },
+        "adminFeedback": {
+          "type": "string",
+          "description": "Feedback or notes provided by the administrator during the review process."
+        }
+      },
+      "required": [
+        "id",
+        "fullName",
+        "email",
+        "teachingExperienceDescription",
+        "proposedCourseTopics",
+        "motivationStatement",
+        "submittedAt",
+        "status"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/contactInquiries/{contactInquiryId}",
+        "definition": {
+          "entityName": "contactInquiry",
+          "schema": {
+            "$ref": "#/backend/entities/ContactInquiry"
+          },
+          "description": "A top-level collection for all contact inquiries submitted through the platform. Anyone can create a document here (for anonymous submissions), while only authorized administrators can read, update, or delete these inquiries. This structure enables efficient QAPs for admin oversight.",
+          "params": [
+            {
+              "name": "contactInquiryId",
+              "description": "Unique identifier for a specific contact inquiry."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/instructorApplications/{instructorApplicationId}",
+        "definition": {
+          "entityName": "instructorApplication",
+          "schema": {
+            "$ref": "#/backend/entities/InstructorApplication"
+          },
+          "description": "A top-level collection for all instructor applications. Each document in this collection MUST include a denormalized 'applicantId' field, which stores the UID of the user who submitted the application. This denormalization is crucial for Authorization Independence, allowing the applicant to read/update their own application and enabling QAPs for both applicants (filtering by applicantId) and administrators (listing all applications).",
+          "params": [
+            {
+              "name": "instructorApplicationId",
+              "description": "Unique identifier for a specific instructor application."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore structure for Contact Inquiries and Instructor Applications is designed following the core principles of Authorization Independence, Structural Segregation, and Query Ability Presets (QAPs), while adhering to Database-Backed Access Control (DBAC). \n\n1.  **Contact Inquiries (`/contactInquiries/{contactInquiryId}`)**:\n    *   **Structural Segregation & QAPs**: All contact inquiries are stored in a single top-level collection. This provides a homogeneous security posture where any user can *create* a new inquiry, but only authenticated administrators can *read, update, or delete* them. This global collection allows administrators to efficiently list all inquiries with simple queries, satisfying QAPs.\n    *   **Authorization Independence**: Since the `ContactInquiry` entity does not specify a `userId` or similar field for submitter tracking, and the requirement implies a simple submission, no complex hierarchical authorization or denormalization for individual user access is needed. The authorization is solely based on the submitting user's ability to write and an admin's ability to read/manage. This avoids any `get()` calls in security rules, ensuring atomic operations and simplifying rule logic.\n\n2.  **Instructor Applications (`/instructorApplications/{instructorApplicationId}`)**:\n    *   **Authorization Independence via Denormalization**: This is critical for `InstructorApplication`. While an applicant submits their own application, an administrator also needs to review *all* applications. To achieve Authorization Independence and enable scalable list operations (QAPs) for both applicants and admins, each `InstructorApplication` document *must* include a denormalized `applicantId` field (representing the `request.auth.uid` of the submitting user). This allows rules to check `resource.data.applicantId == request.auth.uid` without `get()` calls, enabling atomic creation of the application and self-management by the applicant. \n    *   **Structural Segregation & QAPs**: Storing all applications in a top-level collection ensures all documents share the same security posture (applicant-owned, admin-managed). Administrators can list all applications (`/instructorApplications` collection query), and individual applicants can list their own applications using a query like `db.collection('instructorApplications').where('applicantId', '==', currentUserUid)`, all without relying on security rules as filters.\n\n**Admin Authorization Caveat**:\nTo fully implement DBAC for admin access (e.g., granting read/write/delete privileges to the `/contactInquiries` and `/instructorApplications` collections), a dedicated collection like `/roles_admin/{userId}` would ideally be used (where the *presence* of a document signifies an admin role). However, the provided JSON schema constraints for `firestorePaths` dictate that `entityName` must be derived directly from a `$ref` to `#/backend/entities/<EntityName>`. Since no `AdminRole` or `UserRole` entity was provided in the input, a path for admin roles cannot be formally included in the `firestorePaths` array as per the strict output requirements. Therefore, it is assumed that administrative role checking would be implemented via a separate mechanism (e.g., an `isAdmin` flag in a `users` collection not specified here, or via another database if Firebase Auth custom claims are explicitly disallowed) that integrates with Firestore security rules, even if its path cannot be explicitly defined under the current schema constraints. This ensures that the principle of DBAC is still met conceptually for secure access management."
+  }
+}

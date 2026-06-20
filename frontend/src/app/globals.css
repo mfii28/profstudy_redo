@@ -1,0 +1,283 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   RESPONSIVE FOUNDATION
+   Mobile-first base styles that apply across every breakpoint.
+   ============================================================ */
+
+@layer base {
+  /* Prevent unwanted horizontal overflow on every viewport */
+  html {
+    overflow-x: hidden;
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    overflow-x: hidden;
+  }
+
+  /* Fluid, responsive typography using clamp()
+     Base: 14px (mobile) → 16px (desktop)
+     Scales smoothly between 320 px and 1280 px viewports */
+  :root {
+    font-size: clamp(0.875rem, 0.5vw + 0.75rem, 1rem);
+  }
+
+  /* All images & media scale within their container */
+  img,
+  video,
+  canvas,
+  svg,
+  iframe {
+    max-width: 100%;
+    height: auto;
+  }
+
+  /* Touch-friendly tap targets for primary controls — not inline text links */
+  button:not([data-inline-link]),
+  [role="button"]:not([data-inline-link]),
+  input[type="submit"],
+  input[type="button"],
+  input[type="reset"],
+  select {
+    min-height: 44px;
+  }
+
+  /* Inputs & textareas fill their container on mobile */
+  input,
+  textarea,
+  select {
+    max-width: 100%;
+  }
+
+  /* Prevent long words / URLs from breaking layout on narrow viewports */
+  p,
+  h1, h2, h3, h4, h5, h6,
+  li,
+  td,
+  th {
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+
+  /* Tables: always allow horizontal scroll inside their wrappers */
+  table {
+    width: 100%;
+  }
+}
+
+@layer base {
+  :root {
+    --background: 210 40% 98%;
+    --foreground: 217 33% 17%;
+    --card: 0 0% 100%;
+    --card-foreground: 217 33% 17%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 217 33% 17%;
+    --primary: 200 72% 38%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 188 55% 45%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 210 35% 95%;
+    --muted-foreground: 217 14% 44%;
+    --accent: 188 68% 48%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+    --border: 214 22% 88%;
+    --input: 214 22% 88%;
+    --ring: 200 72% 38%;
+    --radius: 0.75rem;
+
+    /* Surface tints — alternating section backgrounds */
+    --surface: 210 38% 96%;
+    --surface-muted: 210 32% 93%;
+    --primary-subtle: 200 55% 94%;
+    --accent-subtle: 188 50% 93%;
+
+    --chart-1: 200 72% 38%;
+    --chart-2: 188 68% 48%;
+    --chart-3: 217 33% 17%;
+    --chart-4: 142 71% 45%;
+    --chart-5: 38 92% 50%;
+
+    /* Sidebar Variables */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 217 33% 17%;
+    --sidebar-primary: 200 72% 38%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 35% 95%;
+    --sidebar-accent-foreground: 200 72% 38%;
+    --sidebar-border: 214 22% 88%;
+    --sidebar-ring: 188 68% 48%;
+  }
+
+  .dark {
+    --background: 217 33% 11%;
+    --foreground: 210 20% 96%;
+    --card: 217 33% 14%;
+    --card-foreground: 210 20% 96%;
+    --popover: 217 33% 12%;
+    --popover-foreground: 210 20% 96%;
+    --primary: 200 68% 52%;
+    --primary-foreground: 217 33% 11%;
+    --secondary: 188 55% 42%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 217 28% 17%;
+    --muted-foreground: 217 12% 72%;
+    --accent: 188 62% 50%;
+    --accent-foreground: 217 33% 11%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+    --border: 217 26% 21%;
+    --input: 217 26% 21%;
+    --ring: 188 62% 50%;
+
+    --surface: 217 30% 14%;
+    --surface-muted: 217 28% 16%;
+    --primary-subtle: 200 40% 18%;
+    --accent-subtle: 188 35% 17%;
+
+    --chart-1: 200 68% 52%;
+    --chart-2: 188 62% 50%;
+    --chart-3: 210 20% 96%;
+    --chart-4: 142 71% 45%;
+    --chart-5: 38 92% 50%;
+
+    /* Dark Mode Sidebar Variables */
+    --sidebar-background: 217 33% 11%;
+    --sidebar-foreground: 210 20% 96%;
+    --sidebar-primary: 200 68% 52%;
+    --sidebar-primary-foreground: 217 33% 11%;
+    --sidebar-accent: 217 28% 17%;
+    --sidebar-accent-foreground: 188 62% 50%;
+    --sidebar-border: 217 26% 21%;
+    --sidebar-ring: 188 62% 50%;
+  }
+}
+
+@layer utilities {
+  /* 3-D animation helpers */
+  .perspective-1000 {
+    perspective: 1000px;
+  }
+  .preserve-3d {
+    transform-style: preserve-3d;
+  }
+  .backface-hidden {
+    backface-visibility: hidden;
+  }
+  .rotate-y-180 {
+    transform: rotateY(180deg);
+  }
+
+  /* Responsive table wrapper — apply when you need a scrollable table
+     inside a Card or constrained container. */
+  .table-responsive {
+    @apply overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0;
+  }
+
+  /* Hide scrollbar visually while keeping scroll functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Touch-scroll on mobile for horizontal carousels / code blocks */
+  .touch-scroll-x {
+    @apply overflow-x-auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Fluid container padding — consistent horizontal breathing room */
+  .container-fluid {
+    @apply w-full px-4 sm:px-6 md:px-8 lg:px-10;
+  }
+}
+
+@layer components {
+  /* Site-wide layout — single source for horizontal rhythm */
+  .page-container {
+    @apply container mx-auto max-w-7xl;
+  }
+
+  .page-container-narrow {
+    @apply container mx-auto max-w-3xl;
+  }
+
+  .page-container-md {
+    @apply container mx-auto max-w-2xl;
+  }
+
+  .page-container-sm {
+    @apply container mx-auto max-w-xl;
+  }
+
+  /* Vertical section rhythm */
+  .section-pad {
+    @apply py-16 md:py-24;
+  }
+
+  .section-pad-lg {
+    @apply py-20 md:py-28;
+  }
+
+  .hero-pad {
+    @apply py-20 md:py-28 lg:py-32;
+  }
+
+  /* Typography helpers for marketing sections */
+  .section-label {
+    @apply mb-3 text-[10px] font-bold uppercase tracking-[0.22em] text-accent;
+  }
+
+  .section-heading {
+    @apply font-headline text-[clamp(1.875rem,3.5vw,2.75rem)] font-black leading-tight text-primary;
+  }
+
+  .section-heading-sm {
+    @apply font-headline text-[clamp(1.5rem,3vw,2.25rem)] font-black leading-tight text-primary;
+  }
+}
+
+@layer utilities {
+  /* Line clamp helpers beyond Tailwind's built-in line-clamp */
+  .line-clamp-4 {
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background font-sans text-foreground antialiased;
+  }
+
+  [data-rte].is-editor-empty:first-child::before,
+  [data-rte] p.is-empty:first-child::before {
+    content: attr(data-placeholder);
+    color: hsl(var(--muted-foreground));
+    pointer-events: none;
+    float: left;
+    height: 0;
+  }
+}

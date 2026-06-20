@@ -1,0 +1,268 @@
+# Settings to manage and configure a Firebase App Hosting backend.
+# https://firebase.google.com/docs/app-hosting/configure
+#
+# IMPORTANT — Secret values are NOT stored in this file. They live in
+# Google Secret Manager. Before the first deploy, create each secret with:
+#
+#   firebase apphosting:secrets:set <SECRET_NAME>
+#
+# (Replace <SECRET_NAME> with the `secret:` field below — by convention it
+# matches the variable name.) The CLI will prompt for the value and grant
+# the App Hosting backend's service account read access automatically.
+#
+# After all required secrets are set, deploy / roll out a new release with:
+#
+#   firebase deploy --only apphosting
+#
+# Optional / commented-out variables can be uncommented when you start
+# using the feature; until then they don't need a Secret Manager entry.
+
+runConfig:
+  # Increase this value if you'd like to automatically spin up
+  # more instances in response to increased traffic.
+  maxInstances: 5
+
+env:
+  # ────────────────────────────────────────────────────────────────────
+  # Firebase Client SDK (public — inlined into the client bundle at build)
+  # These NEXT_PUBLIC_* values ARE exposed in the browser by design, but we
+  # keep them in Secret Manager so the apphosting.yaml stays project-agnostic.
+  # ────────────────────────────────────────────────────────────────────
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    secret: NEXT_PUBLIC_FIREBASE_API_KEY
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    secret: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    secret: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    secret: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+    secret: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    secret: NEXT_PUBLIC_FIREBASE_APP_ID
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
+    secret: NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
+    availability:
+      - BUILD
+      - RUNTIME
+
+  # ────────────────────────────────────────────────────────────────────
+  # Public app config (URLs, public Paystack key, R2 CDN domain)
+  # ────────────────────────────────────────────────────────────────────
+  - variable: NEXT_PUBLIC_BASE_URL
+    secret: NEXT_PUBLIC_BASE_URL
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY
+    secret: NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_R2_PUBLIC_DOMAIN
+    secret: NEXT_PUBLIC_R2_PUBLIC_DOMAIN
+    availability:
+      - BUILD
+      - RUNTIME
+
+  # ────────────────────────────────────────────────────────────────────
+  # Firebase Admin SDK (server-only — NEVER expose to the browser)
+  # Either set FIREBASE_ADMIN_CREDENTIALS (full service account JSON, raw
+  # or base64), or uncomment the split-key alternatives below.
+  # ────────────────────────────────────────────────────────────────────
+  - variable: FIREBASE_ADMIN_CREDENTIALS
+    secret: FIREBASE_ADMIN_CREDENTIALS
+    availability:
+      - RUNTIME
+  # - variable: FIREBASE_ADMIN_CLIENT_EMAIL
+  #   secret: FIREBASE_ADMIN_CLIENT_EMAIL
+  #   availability: [RUNTIME]
+  # - variable: FIREBASE_ADMIN_PRIVATE_KEY
+  #   secret: FIREBASE_ADMIN_PRIVATE_KEY
+  #   availability: [RUNTIME]
+  # - variable: FIREBASE_ADMIN_PRIVATE_KEY_ID
+  #   secret: FIREBASE_ADMIN_PRIVATE_KEY_ID
+  #   availability: [RUNTIME]
+  # - variable: FIREBASE_ADMIN_CLIENT_ID
+  #   secret: FIREBASE_ADMIN_CLIENT_ID
+  #   availability: [RUNTIME]
+
+  # ────────────────────────────────────────────────────────────────────
+  # Google AI / Genkit (Gemini) — used by AI tutor + RAG embeddings
+  # Get a key from https://aistudio.google.com/app/apikey
+  # GEMINI_CHAT_MODEL is optional; override only if the default model errors.
+  # ────────────────────────────────────────────────────────────────────
+  - variable: GOOGLE_API_KEY
+    secret: GOOGLE_API_KEY
+    availability:
+      - RUNTIME
+  # - variable: GEMINI_API_KEY
+  #   secret: GEMINI_API_KEY
+  #   availability: [RUNTIME]
+  # - variable: GEMINI_CHAT_MODEL
+  #   value: gemini-2.0-flash
+  #   availability: [RUNTIME]
+  # - variable: RAG_DISABLE_FIRESTORE_VECTOR
+  #   value: "true"
+  #   availability: [RUNTIME]
+
+  # ────────────────────────────────────────────────────────────────────
+  # Paystack (server secret — public key is above)
+  # ────────────────────────────────────────────────────────────────────
+  - variable: PAYSTACK_SECRET_KEY
+    secret: PAYSTACK_SECRET_KEY
+    availability:
+      - RUNTIME
+
+  # ────────────────────────────────────────────────────────────────────
+  # Resend (transactional email)
+  # ────────────────────────────────────────────────────────────────────
+  - variable: RESEND_API_KEY
+    secret: RESEND_API_KEY
+    availability:
+      - RUNTIME
+  - variable: APP_EMAIL_DOMAIN
+    secret: APP_EMAIL_DOMAIN
+    availability:
+      - RUNTIME
+  - variable: APP_EMAIL_FROM
+    secret: APP_EMAIL_FROM
+    availability:
+      - RUNTIME
+  - variable: INTERNAL_EMAIL_SECRET
+    secret: INTERNAL_EMAIL_SECRET
+    availability:
+      - RUNTIME
+  # - variable: OTP_EMAIL_FROM
+  #   secret: OTP_EMAIL_FROM
+  #   availability: [RUNTIME]
+
+  # ────────────────────────────────────────────────────────────────────
+  # Cloudflare R2 (S3-compatible storage)
+  # ────────────────────────────────────────────────────────────────────
+  - variable: R2_ACCOUNT_ID
+    secret: R2_ACCOUNT_ID
+    availability:
+      - RUNTIME
+  - variable: R2_ACCESS_KEY_ID
+    secret: R2_ACCESS_KEY_ID
+    availability:
+      - RUNTIME
+  - variable: R2_SECRET_ACCESS_KEY
+    secret: R2_SECRET_ACCESS_KEY
+    availability:
+      - RUNTIME
+  - variable: R2_BUCKET_NAME
+    secret: R2_BUCKET_NAME
+    availability:
+      - RUNTIME
+
+  # ────────────────────────────────────────────────────────────────────
+  # Zoom Server-to-Server OAuth
+  # ────────────────────────────────────────────────────────────────────
+  - variable: ZOOM_ACCOUNT_ID
+    secret: ZOOM_ACCOUNT_ID
+    availability:
+      - RUNTIME
+  - variable: ZOOM_CLIENT_ID
+    secret: ZOOM_CLIENT_ID
+    availability:
+      - RUNTIME
+  - variable: ZOOM_CLIENT_SECRET
+    secret: ZOOM_CLIENT_SECRET
+    availability:
+      - RUNTIME
+  # Legacy SDK keys (only needed if you still embed Zoom Web SDK directly)
+  # - variable: ZOOM_SDK_KEY
+  #   secret: ZOOM_SDK_KEY
+  #   availability: [RUNTIME]
+  # - variable: ZOOM_SDK_SECRET
+  #   secret: ZOOM_SDK_SECRET
+  #   availability: [RUNTIME]
+
+  # ────────────────────────────────────────────────────────────────────
+  # Upstash Redis (distributed rate limiting)
+  # ────────────────────────────────────────────────────────────────────
+  - variable: UPSTASH_REDIS_REST_URL
+    secret: UPSTASH_REDIS_REST_URL
+    availability:
+      - RUNTIME
+  - variable: UPSTASH_REDIS_REST_TOKEN
+    secret: UPSTASH_REDIS_REST_TOKEN
+    availability:
+      - RUNTIME
+
+  # ────────────────────────────────────────────────────────────────────
+  # Arkesel SMS / WhatsApp (Ghana)
+  # ────────────────────────────────────────────────────────────────────
+  - variable: ARKESEL_API_KEY
+    secret: ARKESEL_API_KEY
+    availability:
+      - RUNTIME
+  - variable: ARKESEL_SMS_API_KEY
+    secret: ARKESEL_SMS_API_KEY
+    availability:
+      - RUNTIME
+  - variable: ARKESEL_SMS_SENDER_ID
+    secret: ARKESEL_SMS_SENDER_ID
+    availability:
+      - RUNTIME
+  - variable: ARKESEL_WHATSAPP_API_KEY
+    secret: ARKESEL_WHATSAPP_API_KEY
+    availability:
+      - RUNTIME
+  - variable: ARKESEL_WHATSAPP_SENDER
+    secret: ARKESEL_WHATSAPP_SENDER
+    availability:
+      - RUNTIME
+
+  # ────────────────────────────────────────────────────────────────────
+  # Internal job/queue runner auth (required for /api/internal/communications/process)
+  # ────────────────────────────────────────────────────────────────────
+  - variable: INTERNAL_JOBS_SECRET
+    secret: INTERNAL_JOBS_SECRET
+    availability:
+      - RUNTIME
+
+  # ────────────────────────────────────────────────────────────────────
+  # Optional toggles & advanced config (uncomment as needed)
+  # ────────────────────────────────────────────────────────────────────
+  # - variable: ADMIN_ROUTE_MODE
+  #   value: full
+  #   availability: [RUNTIME]
+  # - variable: ENABLE_SCHEDULED_CLEANUP
+  #   value: "true"
+  #   availability: [RUNTIME]
+  # - variable: ENABLE_EMAIL_RETRY
+  #   value: "true"
+  #   availability: [RUNTIME]
+  # - variable: CORS_ALLOWED_ORIGINS
+  #   secret: CORS_ALLOWED_ORIGINS
+  #   availability: [RUNTIME]
+  # - variable: TRUSTED_HOST_SUFFIXES
+  #   secret: TRUSTED_HOST_SUFFIXES
+  #   availability: [RUNTIME]
+  # - variable: SUPERADMIN_TEMP_SIGNUP_KEY
+  #   secret: SUPERADMIN_TEMP_SIGNUP_KEY
+  #   availability: [RUNTIME]
+  # - variable: SENTRY_DSN
+  #   secret: SENTRY_DSN
+  #   availability: [RUNTIME]

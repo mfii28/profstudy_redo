@@ -1,0 +1,11 @@
+{
+  "projects": {
+    "default": "studio-3966187230-a8e92",
+    "profver1": "studio-3966187230-a8e92",
+    "prod": "studio-3966187230-a8e92",
+    "staging": "replace-with-your-staging-project-id",
+    "dev": "replace-with-your-dev-project-id"
+  },
+  "targets": {},
+  "etags": {}
+}

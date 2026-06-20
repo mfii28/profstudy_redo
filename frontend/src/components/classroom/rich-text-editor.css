@@ -1,0 +1,63 @@
+/* TipTap Editor Styles */
+
+.ProseMirror {
+  min-height: 120px;
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+  color: #adb5bd;
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+.ProseMirror pre {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.375rem;
+  font-family: 'Courier New', monospace;
+  overflow-x: auto;
+}
+
+.ProseMirror code {
+  font-family: 'Courier New', monospace;
+  font-size: 0.875em;
+}
+
+.ProseMirror ul,
+.ProseMirror ol {
+  margin: 0.75rem 0;
+  padding-left: 1.5rem;
+}
+
+.ProseMirror li {
+  margin: 0.25rem 0;
+}
+
+.ProseMirror a {
+  color: #2563eb;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.dark .ProseMirror a {
+  color: #60a5fa;
+}
+
+.ProseMirror p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.ProseMirror blockquote {
+  border-left: 4px solid #e2e8f0;
+  margin: 0.75rem 0;
+  padding-left: 1rem;
+  color: #6b7280;
+  font-style: italic;
+}
+
+.dark .ProseMirror blockquote {
+  border-left-color: #4b5563;
+  color: #9ca3af;
+}

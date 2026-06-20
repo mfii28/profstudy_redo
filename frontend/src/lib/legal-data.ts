@@ -1,0 +1,46 @@
+'use client';
+
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { db } from '@/firebase/firestore';
+import type { LegalDocuments, LegalDocument } from '@/lib/db';
+
+export type { LegalDocuments, LegalDocument };
+
+const DOC_ID = 'site-legal-docs';
+const COLLECTION_ID = 'platformContent';
+
+const defaultLegalDocs: LegalDocuments = {
+    terms: {
+      title: "Terms of Service",
+      content: "<h2>1. Agreement to Terms</h2><p>By using our services, you agree to be bound by these Terms of Service. If you do not agree to these terms, please do not use our services.</p><h2>2. Accounts</h2><p>When you create an account with us, you must provide us with information that is accurate, complete, and current at all times. Failure to do so constitutes a breach of the Terms, which may result in immediate termination of your account on our service.</p><h2>3. Intellectual Property</h2><p>The Service and its original content, features, and functionality are and will remain the exclusive property of Profs Training Solutions and its licensors.</p><h2>4. Contact Us</h2><p>If you have any questions about these Terms, please contact us at legal@profstrainingsolutions.com.</p>"
+    },
+    privacy: {
+      title: "Privacy Policy",
+      content: "<h2>1. Introduction</h2><p>Welcome to Profs Training Solutions. We are committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you visit our website.</p><h2>2. Information We Collect</h2><p>We may collect personal information such as your name, email address, and payment information when you register for an account, purchase a course, or contact us.</p><h2>3. How We Use Your Information</h2><p>We use the information we collect to provide, operate, and maintain our services, process your transactions, send you marketing communications, and respond to your comments and questions.</p><h2>4. Contact Us</h2><p>If you have any questions about this Privacy Policy, please contact us at privacy@profstrainingsolutions.com.</p>"
+    },
+    refund: {
+        title: "Refund Policy",
+        content: "<h2>1. General Policy</h2><p>We offer a 30-day money-back guarantee on all our courses. If you are not satisfied with your purchase, you can request a full refund within 30 days of the purchase date.</p><h2>2. How to Request a Refund</h2><p>To request a refund, please contact our support team at support@profstrainingsolutions.com with your order details. Refunds will be processed within 5-7 business days.</p><h2>3. Exceptions</h2><p>No refunds will be provided for physical goods like textbooks once they have been shipped. Digital product bundles are non-refundable if a significant portion of the content has been downloaded or consumed.</p>"
+    }
+};
+
+export const getLegalDocuments = async (): Promise<LegalDocuments> => {
+    if (!db) return defaultLegalDocs;
+    try {
+        const docRef = doc(db, COLLECTION_ID, DOC_ID);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+            return docSnap.data() as LegalDocuments;
+        }
+        await saveLegalDocuments(defaultLegalDocs);
+        return defaultLegalDocs;
+    } catch (e) {
+        return defaultLegalDocs;
+    }
+};
+
+export const saveLegalDocuments = async (docs: LegalDocuments): Promise<void> => {
+    if (!db) return;
+    const docRef = doc(db, COLLECTION_ID, DOC_ID);
+    await setDoc(docRef, docs, { merge: true });
+};

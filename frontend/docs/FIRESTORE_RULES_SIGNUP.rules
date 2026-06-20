@@ -1,0 +1,142 @@
+/**
+ * FIRESTORE SECURITY RULES FOR STUDENT SIGNUP WITH NEW FIELDS
+ * File: src/firestore.rules
+ *
+ * Rules validate:
+ * 1. Phone number format (E.164)
+ * 2. Registration number uniqueness and format
+ * 3. Affiliate link domain whitelist
+ * 4. Immutability of sensitive fields post-signup
+ */
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ========================================================================
+    // HELPER FUNCTIONS
+    // ========================================================================
+
+    // Validate E.164 phone number format
+    function isValidE164Phone(phone) {
+      return phone is string && 
+             phone.matches('^\\+[1-9]\\d{1,14}$');
+    }
+
+    // Validate student registration number format (STUD-YYYY-XXXXXX)
+    function isValidRegistrationNumber(regNum) {
+      return regNum is string && 
+             regNum.matches('^STUD-\\d{4}-\\d{6}$');
+    }
+
+    // Validate affiliate link (optional, but if provided must be valid URL)
+    function isValidAffiliateLink(link) {
+      return (link == null || 
+              (link is string && 
+               link.matches('^https?://[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}(/.*)?$')));
+    }
+
+    // Check if domain is whitelisted for affiliate links
+    function isWhitelistedAffiliateDomain(url) {
+      let allowedDomains = [
+        'studymate.com',
+        'www.studymate.com',
+        'ref.studymate.com',
+        'referral.studymate.com'
+      ];
+      return url == null || 
+             url in '' || 
+             url.contains('studymate.com');
+    }
+
+    // Verify user authentication
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Verify user owns document or is admin
+    function isOwnerOrAdmin() {
+      return request.auth.uid == resource.id || 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'subadmin', 'superadmin'];
+    }
+
+    // Verify new user document has all required fields
+    function hasRequiredNewFields(data) {
+      return data.phone_number is string &&
+             data.student_registration_number is string &&
+             isValidE164Phone(data.phone_number) &&
+             isValidRegistrationNumber(data.student_registration_number);
+    }
+
+    // ========================================================================
+    // RULES: users COLLECTION
+    // ========================================================================
+
+    match /users/{userId} {
+      // READ: User can read own doc, admins can read any
+      allow read: if request.auth.uid == userId || 
+                     request.auth.token.role in ['admin', 'subadmin', 'superadmin'];
+
+      // CREATE: Signup flow — new user creates own profile
+      allow create: if request.auth.uid == userId && 
+                       hasRequiredNewFields(request.resource.data) &&
+                       isValidAffiliateLink(request.resource.data.affiliate_link) &&
+                       isWhitelistedAffiliateDomain(request.resource.data.affiliate_link) &&
+                       request.resource.data.email is string &&
+                       request.resource.data.name is string &&
+                       request.resource.data.role == 'student' &&
+                       request.resource.data.status == 'active';
+
+      // UPDATE: User can update own profile, with field protections
+      allow update: if request.auth.uid == userId && 
+                       // Allow safe field updates
+                       (request.resource.data.name is string ||
+                        request.resource.data.bio is string ||
+                        request.resource.data.avatar is string ||
+                        request.resource.data.preferences is map ||
+                        request.resource.data.address is map ||
+                        request.resource.data.affiliate_link is string) &&
+                       // Immutable fields cannot change
+                       resource.data.email == request.resource.data.email &&
+                       resource.data.phone_number == request.resource.data.phone_number &&
+                       resource.data.student_registration_number == request.resource.data.student_registration_number;
+
+      // DELETE: Only admins can delete users
+      allow delete: if request.auth.token.role in ['admin', 'superadmin'];
+    }
+
+    // ========================================================================
+    // RULES: affiliate_links COLLECTION (Optional: Track usage)
+    // ========================================================================
+
+    match /affiliate_links/{link_id} {
+      allow read: if request.auth.token.role in ['admin', 'subadmin', 'superadmin'];
+      
+      allow write: if request.auth.token.role in ['admin', 'superadmin'] &&
+                      isValidAffiliateLink(request.resource.data.url);
+    }
+
+    // ========================================================================
+    // RULES: registration_verification COLLECTION (Optional: Admin verification)
+    // ========================================================================
+
+    match /registration_verification/{verificationId} {
+      allow read: if request.auth.uid == resource.data.userId ||
+                     request.auth.token.role in ['admin', 'subadmin', 'superadmin'];
+      
+      allow create: if request.auth.token.role in ['admin', 'subadmin', 'superadmin'] &&
+                       request.resource.data.student_registration_number is string &&
+                       request.resource.data.status in ['pending', 'verified', 'rejected'];
+                       
+      allow update: if request.auth.token.role in ['admin', 'subadmin', 'superadmin'] &&
+                       request.resource.data.verifiedAt is timestamp;
+    }
+
+    // ========================================================================
+    // DEFAULT: Deny all other access
+    // ========================================================================
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "settings": [
+    { "id": "enable-new-registrations", "label": "New User Registrations", "description": "Allow new users to sign up for an account.", "isEnabled": true },
+    { "id": "enable-ai-features", "label": "AI Features", "description": "Globally enable or disable all AI-powered tools.", "isEnabled": true },
+    { "id": "enable-trusted-tutor-bypass", "label": "Trusted Tutor Bypass", "description": "Allow designated 'Trusted Tutors' to publish courses without admin review.", "isEnabled": false },
+    { "id": "enable-transaction-throttling", "label": "Card Testing Protection", "description": "Automatically block users with more than 3 failed payment attempts in 10 minutes.", "isEnabled": true },
+    { "id": "ai-model-tier-high", "label": "High-Performance AI Tier", "description": "Use advanced reasoning models for all tutor interactions. Increases API overhead.", "isEnabled": false },
+    { "id": "free-lesson-preview", "label": "Guest Lesson Previews", "description": "Allow non-enrolled users to view the first lesson of any course as a trial.", "isEnabled": true },
+    { "id": "payout-auto-approve", "label": "Automated Payouts", "description": "Instantly approve tutor withdrawal requests that are under GH₵ 200.", "isEnabled": false },
+    { "id": "streak-grace-period", "label": "Streak Protection", "description": "Grant a 24-hour grace window before a student's study streak is reset.", "isEnabled": true },
+    { "id": "leaderboard-public-names", "label": "Public Leaderboards", "description": "Display full student names instead of anonymous handles on global rankings.", "isEnabled": true },
+    { "id": "force-password-rotation", "label": "Mandatory Security Updates", "description": "Force all users to update their account passwords every 90 days.", "isEnabled": false },
+    { "id": "point-multiplier-exam-season", "label": "Milestone Reward Multipliers", "description": "Boost study points earned by 2x during designated exam seasons.", "isEnabled": false },
+    { "id": "enforce-access-expiration", "label": "Course Access Duration", "description": "Enforce a 180-day access limit on all course enrollments.", "isEnabled": false },
+    { "id": "ai-human-escalation", "label": "Human Tutor Escalation", "description": "Allow the AI Tutor to flag complex student queries for real instructor review.", "isEnabled": true },
+    { "id": "enable-bulk-discounts", "label": "Institutional Bulk Pricing", "description": "Enable discounted seat tiers for accounting firms and organizations.", "isEnabled": true },
+    { "id": "beta-feature-cohort", "label": "Premium-Only Beta Access", "description": "Restrict access to experimental platform features to Premium subscribers only.", "isEnabled": false },
+    { "id": "enable-local-dialects", "label": "Localized UI Support", "description": "Enable UI translation support for Twi and Ga dialects in the student dashboard.", "isEnabled": false },
+    { "id": "permit-offline-caching", "label": "Mobile Offline Availability", "description": "Allow mobile users to download and cache video lessons for offline study.", "isEnabled": true },
+    { "id": "student-thread-creation", "label": "Student Discussion Permissions", "description": "Allow students to create new public threads in course discussion boards.", "isEnabled": true }
+  ]
+}

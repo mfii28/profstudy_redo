@@ -1,0 +1,28 @@
+{
+  "steps": [
+    {
+      "id": "step-1",
+      "title": "Welcome Screen",
+      "description": "A modal that welcomes the user to the platform.",
+      "isEnabled": true
+    },
+    {
+      "id": "step-2",
+      "title": "Complete Profile",
+      "description": "Prompt the user to add an avatar and a short bio.",
+      "isEnabled": true
+    },
+    {
+      "id": "step-3",
+      "title": "Choose Interests",
+      "description": "Ask the user to select topics like \"ICAG\" or \"CITG\".",
+      "isEnabled": false
+    },
+    {
+      "id": "step-4",
+      "title": "Follow a Tutor",
+      "description": "Suggest following a few popular instructors.",
+      "isEnabled": false
+    }
+  ]
+}
