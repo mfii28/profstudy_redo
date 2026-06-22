@@ -1,11 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
-from sqlalchemy import select, and_
 from app.core.database import get_db
 from app.core.config import settings
 from app.core.security import get_current_user
-from app.models.models import User, Course, TutorDetail, Order
 from app.api.v1.endpoints.rag import get_course_markdown_text
 import google.generativeai as genai
 import json
@@ -52,7 +49,7 @@ Your answer:"""
 async def ai_tutor_stream(
     payload: Dict[str, Any],
     current_user: Dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db = Depends(get_db)
 ):
     """
     Streams Gemini chat responses for the AI Tutor RAG flow.
@@ -72,21 +69,19 @@ async def ai_tutor_stream(
     role = current_user.get("role", "student")
     
     # 1. Verify course existence
-    course = db.query(Course).filter(Course.id == course_id).first()
+    course = db["Course"].find_one({"_id": course_id})
     if not course:
         raise HTTPException(status_code=404, detail="Course not found.")
         
     # 2. Verify enrollment or tutor/admin permissions
     is_staff = role in ['admin', 'superadmin', 'subadmin']
-    tutor = db.query(TutorDetail).filter(TutorDetail.userId == uid).first()
-    is_owner = tutor is not None and course.tutorId == tutor.id
+    tutor = db["TutorDetail"].find_one({"userId": uid})
+    is_owner = tutor is not None and course.get("tutorId") == tutor.get("_id")
     
     has_access = is_staff or is_owner
     if not has_access:
         # Check student enrollment via order status
-        order = db.query(Order).filter(
-            and_(Order.userId == uid, Order.status == "completed")
-        ).first()
+        order = db["Order"].find_one({"userId": uid, "status": "completed"})
         if order:
             has_access = True
             

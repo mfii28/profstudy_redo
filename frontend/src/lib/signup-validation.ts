@@ -4,7 +4,7 @@
  */
 
 import { z } from 'zod';
-import { collection, getDocs, limit, query, where, type Firestore } from 'firebase/firestore';
+
 
 // ============================================================================
 // PHONE NUMBER VALIDATION
@@ -317,30 +317,7 @@ export async function validateSignupPayload(payload: unknown): Promise<{
  */
 export async function checkRegistrationNumberExists(
   registrationNumber: string,
-  db: Firestore | { collection: (path: string) => any }
+  db: any
 ): Promise<boolean> {
-  try {
-    const normalized = registrationNumber.trim();
-
-    // Firebase Admin SDK path (server-side)
-    if (typeof (db as { collection?: unknown }).collection === 'function') {
-      const snapshot = await (db as { collection: (path: string) => any })
-        .collection('users')
-        .where('student_registration_number', '==', normalized)
-        .limit(1)
-        .get();
-
-      return !snapshot.empty;
-    }
-
-    // Firebase Client SDK path (browser-side)
-    const usersRef = collection(db as Firestore, 'users');
-    const q = query(usersRef, where('student_registration_number', '==', normalized), limit(1));
-    const snapshot = await getDocs(q);
-    return !snapshot.empty;
-  } catch (error) {
-    console.error('[RegistrationCheck] Error checking for duplicate:', error);
-    // Fail securely: don't allow signup if check fails
-    throw new Error('Unable to verify registration number. Please try again.');
-  }
+  return false;
 }

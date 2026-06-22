@@ -1,5 +1,4 @@
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { db } from '@/firebase/firestore';
+import { getGlobalSettingsAction, setGlobalSettingsAction } from '@/app/actions/settings';
 import { type GlobalSettings } from './db';
 
 /**
@@ -81,39 +80,15 @@ export const defaultGlobalSettings: GlobalSettings = {
 };
 
 export const getGlobalSettings = async (forceRefresh = false): Promise<GlobalSettings> => {
-    // SSR GUARD: Return defaults if running on server without DB access
-    if (!db) {
-        return defaultGlobalSettings;
-    }
-    
     if (settingsCache && !forceRefresh) {
         return settingsCache;
     }
-
-    try {
-        const docRef = doc(db, 'platformSettings', 'master-config');
-        const docSnap = await getDoc(docRef);
-        
-        if (docSnap.exists()) {
-            const remoteData = docSnap.data();
-            settingsCache = { ...defaultGlobalSettings, ...remoteData } as GlobalSettings;
-            return settingsCache;
-        }
-        
-        return defaultGlobalSettings;
-    } catch (error) {
-        return defaultGlobalSettings;
-    }
+    const settings = await getGlobalSettingsAction(forceRefresh);
+    settingsCache = settings;
+    return settings;
 };
 
 export const setGlobalSettings = async (settings: GlobalSettings): Promise<void> => {
-    if (!db) throw new Error('Database connection unavailable.');
-    const docRef = doc(db, 'platformSettings', 'master-config');
-    
-    await setDoc(docRef, {
-        ...settings,
-        updatedAt: new Date().toISOString()
-    }, { merge: true });
-    
+    await setGlobalSettingsAction(settings);
     settingsCache = settings;
 };

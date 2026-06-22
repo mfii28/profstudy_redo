@@ -1,5 +1,6 @@
 import type { NextConfig } from 'next';
 import withPWAInit from '@ducanh2912/next-pwa';
+import path from 'path';
 
 const withPWA = withPWAInit({
   dest: 'public',
@@ -199,6 +200,9 @@ const nextConfig: NextConfig = {
   // Allow pdf.worker.min.mjs from pdfjs-dist to be served as a static asset
   webpack: (config, { dev }) => {
     config.resolve.alias.canvas = false;
+    config.resolve.alias['firebase/app'] = path.resolve(__dirname, 'src/firebase/compat/app.ts');
+    config.resolve.alias['firebase/firestore'] = path.resolve(__dirname, 'src/firebase/compat/firestore.ts');
+    config.resolve.alias['firebase/auth'] = path.resolve(__dirname, 'src/firebase/compat/auth.ts');
     if (dev) {
       // Windows / network paths: more reliable watching; can reduce “stuck” compiles.
       config.watchOptions = {

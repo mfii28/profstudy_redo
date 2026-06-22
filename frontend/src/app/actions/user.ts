@@ -501,3 +501,219 @@ export async function notifyPasswordResetRequested(email: string): Promise<{ suc
 
   return { success: true };
 }
+
+export async function checkRegistrationNumberExistsAction(registrationNumber: string): Promise<boolean> {
+  const prisma = (await import('@/lib/prisma')).default;
+  try {
+    const user = await prisma.user.findFirst({
+      where: { student_registration_number: registrationNumber.trim() }
+    });
+    return !!user;
+  } catch (error) {
+    console.error('checkRegistrationNumberExistsAction failed:', error);
+    return false;
+  }
+}
+
+export async function registerUser(params: {
+  name: string;
+  email: string;
+  password: string;
+  role: 'student' | 'tutor';
+  phone_number: string;
+  student_registration_number?: string;
+  affiliate_link?: string;
+  referredBy?: string;
+}) {
+  const prisma = (await import('@/lib/prisma')).default;
+  const bcrypt = (await import('bcryptjs')).default;
+  const { v4: uuidv4 } = await import('uuid');
+
+  try {
+    const email = params.email.trim().toLowerCase();
+    const name = params.name.trim();
+
+    // Check if email exists
+    const existing = await prisma.user.findUnique({
+      where: { email }
+    });
+    if (existing) {
+      return { error: 'This email is already registered.' };
+    }
+
+    // Check if registration number exists
+    if (params.student_registration_number) {
+      const regExists = await prisma.user.findFirst({
+        where: { student_registration_number: params.student_registration_number.trim() }
+      });
+      if (regExists) {
+        return { error: 'This registration number is already in use.' };
+      }
+    }
+
+    const passwordHash = await bcrypt.hash(params.password, 10);
+    const userId = uuidv4();
+    const now = new Date();
+
+    const newUser = await prisma.user.create({
+      data: {
+        id: userId,
+        email,
+        name,
+        passwordHash,
+        role: params.role,
+        status: 'active',
+        phone_number: params.phone_number,
+        student_registration_number: params.student_registration_number ? params.student_registration_number.trim() : null,
+        affiliate_link: params.affiliate_link || null,
+        referredBy: params.referredBy || null,
+        isPremium: false,
+        tutorApproved: false,
+        studyStreak: 0,
+        emailVerified: false,
+        createdAt: now,
+        updatedAt: now,
+        aiUsage: {
+          tokensRemaining: params.role === 'tutor' ? 100 : 50,
+          lastResetDate: now.toISOString(),
+        },
+        enrollments: [],
+      }
+    });
+
+    // Send welcome email
+    try {
+      const { sendTransactionalEmail } = await import('./email');
+      await sendTransactionalEmail({
+        type: 'welcome',
+        to: email,
+        recipientName: name,
+        internalSecret: process.env.INTERNAL_EMAIL_SECRET,
+      });
+    } catch (err) {
+      console.error('[Signup Action] Welcome email failed:', err);
+    }
+
+    // Generate/Send OTP
+    const jwt = (await import('jsonwebtoken')).default;
+    const secret = process.env.NEXTAUTH_SECRET || process.env.INTERNAL_EMAIL_SECRET || 'fallback-secret';
+    const callerIdToken = jwt.sign({ sub: userId, role: params.role }, secret, { expiresIn: '5m' });
+
+    try {
+      const { sendOtpEmail } = await import('./otp');
+      const otpResult = await sendOtpEmail({ uid: userId, callerIdToken });
+      if (otpResult.error) {
+        console.error('[Signup Action] sendOtpEmail failed:', otpResult.error);
+        return { success: true, user: { id: newUser.id, name: newUser.name, email: newUser.email, role: newUser.role }, otpError: otpResult.error, callerIdToken };
+      }
+    } catch (err: any) {
+      console.error('[Signup Action] OTP send exception:', err);
+      return { success: true, user: { id: newUser.id, name: newUser.name, email: newUser.email, role: newUser.role }, otpError: err.message || 'OTP send failed', callerIdToken };
+    }
+
+    return { success: true, user: { id: newUser.id, name: newUser.name, email: newUser.email, role: newUser.role }, callerIdToken };
+  } catch (error: any) {
+    console.error('[Signup Action] Exception during registration:', error);
+    return { error: error.message || 'An unexpected error occurred during signup.' };
+  }
+}
+
+export async function getUserProfileAction() {
+  const { getServerSession } = await import('next-auth/next');
+  const { authOptions } = await import('@/lib/auth-options');
+  const session = await getServerSession(authOptions);
+  if (!session?.user) return { error: 'Not authenticated' };
+
+  const prisma = (await import('@/lib/prisma')).default;
+  const user = await prisma.user.findUnique({
+    where: { id: (session.user as any).id }
+  });
+
+  if (!user) return { error: 'User not found' };
+
+  return {
+    success: true,
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      avatar: user.avatar || '',
+      bio: user.bio || '',
+    }
+  };
+}
+
+export async function updateUserProfileAction(data: { name?: string; bio?: string; avatar?: string }) {
+  const { getServerSession } = await import('next-auth/next');
+  const { authOptions } = await import('@/lib/auth-options');
+  const session = await getServerSession(authOptions);
+  if (!session?.user) return { error: 'Not authenticated' };
+
+  const prisma = (await import('@/lib/prisma')).default;
+
+  const updated = await prisma.user.update({
+    where: { id: (session.user as any).id },
+    data: {
+      name: data.name,
+      bio: data.bio,
+      avatar: data.avatar,
+      updatedAt: new Date()
+    }
+  });
+
+  return {
+    success: true,
+    user: {
+      id: updated.id,
+      name: updated.name,
+      email: updated.email,
+      role: updated.role,
+      avatar: updated.avatar || '',
+      bio: updated.bio || '',
+    }
+  };
+}
+
+export async function changeUserPasswordAction(params: { currentPassword?: string; newPassword?: string }) {
+  const { getServerSession } = await import('next-auth/next');
+  const { authOptions } = await import('@/lib/auth-options');
+  const session = await getServerSession(authOptions);
+  if (!session?.user) return { error: 'Not authenticated' };
+
+  if (!params.currentPassword || !params.newPassword) {
+    return { error: 'Current password and new password are required.' };
+  }
+  if (params.newPassword.length < 8) {
+    return { error: 'New password must be at least 8 characters long.' };
+  }
+
+  const prisma = (await import('@/lib/prisma')).default;
+  const bcrypt = (await import('bcryptjs')).default;
+
+  const user = await prisma.user.findUnique({
+    where: { id: (session.user as any).id }
+  });
+
+  if (!user || !user.passwordHash) {
+    return { error: 'User not found or does not have a local password login.' };
+  }
+
+  const isValid = await bcrypt.compare(params.currentPassword, user.passwordHash);
+  if (!isValid) {
+    return { error: 'Current password is incorrect.' };
+  }
+
+  const newHash = await bcrypt.hash(params.newPassword, 10);
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      passwordHash: newHash,
+      updatedAt: new Date()
+    }
+  });
+
+  return { success: true };
+}
+
+

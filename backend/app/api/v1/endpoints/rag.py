@@ -1,10 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.orm import Session
-from sqlalchemy import select, and_
 from app.core.database import get_db
 from app.core.config import settings
 from app.core.security import get_current_user
-from app.models.models import User, Course, CourseRagSource, TutorDetail, Order
 from app.services.r2_service import r2_service
 import hashlib
 import httpx
@@ -13,6 +10,7 @@ import zipfile
 import xml.etree.ElementTree as ET
 from io import BytesIO
 from typing import Dict, Any, Optional, List
+from datetime import datetime
 
 router = APIRouter()
 
@@ -21,17 +19,17 @@ def sha256_hex(input_str: str) -> str:
     return hashlib.sha256(input_str.encode('utf-8')).hexdigest()
 
 # Helper: verify tutor or admin has course management permissions
-def verify_course_manager(course_id: str, current_user: Dict, db: Session) -> Course:
+def verify_course_manager(course_id: str, current_user: Dict, db) -> Dict:
     uid = current_user["id"]
     role = current_user.get("role", "student")
     
-    course = db.query(Course).filter(Course.id == course_id).first()
+    course = db["Course"].find_one({"_id": course_id})
     if not course:
         raise HTTPException(status_code=404, detail="Course not found.")
         
     is_staff = role in ['admin', 'superadmin', 'subadmin']
-    tutor = db.query(TutorDetail).filter(TutorDetail.userId == uid).first()
-    is_owner = tutor is not None and course.tutorId == tutor.id
+    tutor = db["TutorDetail"].find_one({"userId": uid})
+    is_owner = tutor is not None and course.get("tutorId") == tutor.get("_id")
     
     if not is_staff and not is_owner:
         raise HTTPException(
@@ -131,8 +129,6 @@ def replace_or_append_source_section(existing_markdown: str, source_label: str, 
 async def get_course_markdown_text(course_id: str) -> str:
     key = f"private/courses/{course_id}/rag/materials.md"
     try:
-        # Since boto3 is blocking, we can use a threadpool or run directly if volume is small
-        # For simplicity, we just download via our R2 service
         url = r2_service.generate_download_url(key)
         if not url:
             return ""
@@ -152,16 +148,16 @@ async def save_course_markdown_text(course_id: str, markdown_text: str):
     if not url:
          raise ValueError("Failed to generate upload URL for course materials.")
     async with httpx.AsyncClient() as client:
-        res = await client.put(url, content=markdown_text.encode('utf-8'), headers={"Content-Type": "text/markdown"})
-        if res.status_code != 200:
-            raise ValueError("Failed to upload course materials to R2 bucket.")
+         res = await client.put(url, content=markdown_text.encode('utf-8'), headers={"Content-Type": "text/markdown"})
+         if res.status_code != 200:
+             raise ValueError("Failed to upload course materials to R2 bucket.")
 
 @router.post("/course/{course_id}/ingest-text")
 async def ingest_text(
     course_id: str,
     payload: Dict[str, Any],
     current_user: Dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db = Depends(get_db)
 ):
     source_label = payload.get("sourceLabel")
     text_content = payload.get("text")
@@ -180,11 +176,12 @@ async def ingest_text(
     safe_source = source_label.strip()[:200]
     
     # Idempotency check using database
-    existing_source = db.query(CourseRagSource).filter(
-        and_(CourseRagSource.courseId == course_id, CourseRagSource.sourceFile == safe_source)
-    ).first()
+    existing_source = db["CourseRagSource"].find_one({
+        "courseId": course_id,
+        "sourceFile": safe_source
+    })
     
-    if existing_source and existing_source.contentHash == content_hash:
+    if existing_source and existing_source.get("contentHash") == content_hash:
         return {"ok": True, "chunkCount": 1, "skipped": True}
         
     # Fetch, append, and upload markdown
@@ -193,19 +190,18 @@ async def ingest_text(
     await save_course_markdown_text(course_id, updated_md)
     
     # Save/update metadata in DB
-    if not existing_source:
-        existing_source = CourseRagSource(
-            id=f"rag-{course_id}-{sha256_hex(safe_source)[:12]}",
-            courseId=course_id,
-            sourceFile=safe_source,
-            contentHash=content_hash,
-            chunkCount=1
-        )
-        db.add(existing_source)
-    else:
-        existing_source.contentHash = content_hash
-        
-    db.commit()
+    db["CourseRagSource"].update_one(
+        {"courseId": course_id, "sourceFile": safe_source},
+        {"$set": {
+            "_id": f"rag-{course_id}-{sha256_hex(safe_source)[:12]}",
+            "courseId": course_id,
+            "sourceFile": safe_source,
+            "contentHash": content_hash,
+            "chunkCount": 1,
+            "updatedAt": datetime.utcnow()
+        }},
+        upsert=True
+    )
     return {"ok": True, "chunkCount": 1}
 
 @router.post("/course/{course_id}/ingest-file")
@@ -213,7 +209,7 @@ async def ingest_file(
     course_id: str,
     payload: Dict[str, Any],
     current_user: Dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db = Depends(get_db)
 ):
     source_label = payload.get("sourceLabel")
     file_key = payload.get("fileKey")
@@ -258,11 +254,12 @@ async def ingest_file(
     safe_source = source_label.strip()[:200]
     
     # Idempotency check using DB
-    existing_source = db.query(CourseRagSource).filter(
-        and_(CourseRagSource.courseId == course_id, CourseRagSource.sourceFile == safe_source)
-    ).first()
+    existing_source = db["CourseRagSource"].find_one({
+        "courseId": course_id,
+        "sourceFile": safe_source
+    })
     
-    if existing_source and existing_source.contentHash == content_hash:
+    if existing_source and existing_source.get("contentHash") == content_hash:
         return {"ok": True, "chunkCount": 1, "skipped": True}
         
     # Fetch, append, upload markdown
@@ -271,46 +268,43 @@ async def ingest_file(
     await save_course_markdown_text(course_id, updated_md)
     
     # Update DB
-    if not existing_source:
-        existing_source = CourseRagSource(
-            id=f"rag-{course_id}-{sha256_hex(safe_source)[:12]}",
-            courseId=course_id,
-            sourceFile=safe_source,
-            contentHash=content_hash,
-            chunkCount=1
-        )
-        db.add(existing_source)
-    else:
-        existing_source.contentHash = content_hash
-        
-    db.commit()
+    db["CourseRagSource"].update_one(
+        {"courseId": course_id, "sourceFile": safe_source},
+        {"$set": {
+            "_id": f"rag-{course_id}-{sha256_hex(safe_source)[:12]}",
+            "courseId": course_id,
+            "sourceFile": safe_source,
+            "contentHash": content_hash,
+            "chunkCount": 1,
+            "updatedAt": datetime.utcnow()
+        }},
+        upsert=True
+    )
     return {"ok": True, "chunkCount": 1}
 
 @router.get("/course/{course_id}/stats")
 def get_rag_stats(
     course_id: str,
     current_user: Dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db = Depends(get_db)
 ):
     uid = current_user["id"]
     role = current_user.get("role", "student")
     
     # Check course existence
-    course = db.query(Course).filter(Course.id == course_id).first()
+    course = db["Course"].find_one({"_id": course_id})
     if not course:
         raise HTTPException(status_code=404, detail="Course not found.")
         
     # Verify enrollment or tutor/admin status
     is_staff = role in ['admin', 'superadmin', 'subadmin']
-    tutor = db.query(TutorDetail).filter(TutorDetail.userId == uid).first()
-    is_owner = tutor is not None and course.tutorId == tutor.id
+    tutor = db["TutorDetail"].find_one({"userId": uid})
+    is_owner = tutor is not None and course.get("tutorId") == tutor.get("_id")
     
     has_access = is_staff or is_owner
     if not has_access:
-        # Check student enrollment via order status (completed orders indicate purchase/enrollment)
-        order = db.query(Order).filter(
-            and_(Order.userId == uid, Order.status == "completed")
-        ).first()
+        # Check student enrollment via order status
+        order = db["Order"].find_one({"userId": uid, "status": "completed"})
         if order:
             has_access = True
             
@@ -318,8 +312,8 @@ def get_rag_stats(
         raise HTTPException(status_code=403, detail="Permission denied.")
         
     # Fetch sources from DB
-    rag_sources = db.query(CourseRagSource).filter(CourseRagSource.courseId == course_id).all()
-    sources = [s.sourceFile for s in rag_sources]
+    rag_sources = db["CourseRagSource"].find({"courseId": course_id})
+    sources = [s.get("sourceFile") for s in rag_sources]
     
     return {
         "chunkCount": len(sources),

@@ -1,10 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.orm import Session
-from sqlalchemy import select, and_
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.services.r2_service import r2_service
-from app.models.models import User, TutorDetail, Course, BookPurchase, Classroom, Order
 import re
 import time
 from typing import Dict, Optional, List
@@ -75,11 +72,11 @@ def sanitize_key(key: str) -> str:
     decoded = re.sub(r'[<>:"|?*\\]', '', decoded)
     return re.sub(r'\s+', '_', decoded)
 
-def verify_user_role(user_id: str, allowed_roles: List[str], db: Session) -> bool:
-    user = db.query(User).filter(User.id == user_id).first()
-    return user is not None and user.role in allowed_roles
+def verify_user_role(user_id: str, allowed_roles: List[str], db) -> bool:
+    user = db["User"].find_one({"_id": user_id})
+    return user is not None and user.get("role") in allowed_roles
 
-def derive_secure_path(uid: str, upload_type: str, file_name: str, context_id: Optional[str], db: Session) -> str:
+def derive_secure_path(uid: str, upload_type: str, file_name: str, context_id: Optional[str], db) -> str:
     clean_name = sanitize_key(file_name)
     timestamp = int(time.time() * 1000)
     
@@ -142,7 +139,7 @@ def get_upload_url(
     contextId: Optional[str] = Query(None),
     lessonType: Optional[str] = Query(None),
     current_user: Dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db = Depends(get_db)
 ):
     uid = current_user["id"]
     
@@ -189,7 +186,7 @@ def get_download_url(
     asAttachment: bool = Query(False),
     fileName: Optional[str] = Query(None),
     current_user: Dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db = Depends(get_db)
 ):
     uid = current_user["id"]
     clean_key = sanitize_key(key)
@@ -207,37 +204,30 @@ def get_download_url(
         # Classroom match checks
         if not has_access and clean_key.startswith("private/classrooms/"):
             classroom_id = clean_key.split('/')[2]
-            classroom = db.query(Classroom).filter(Classroom.id == classroom_id).first()
+            classroom = db["Classroom"].find_one({"_id": classroom_id})
             if classroom:
-                if classroom.tutorId == uid or (classroom.enrolledStudentIds and uid in classroom.enrolledStudentIds):
+                tutor_id = classroom.get("tutorId")
+                enrolled_students = classroom.get("enrolledStudentIds") or []
+                if tutor_id == uid or uid in enrolled_students:
                     has_access = True
                     
         # Course match checks
         if not has_access and clean_key.startswith("private/courses/"):
             course_id = clean_key.split('/')[2]
-            course = db.query(Course).filter(Course.id == course_id).first()
+            course = db["Course"].find_one({"_id": course_id})
             if course:
-                # Check if the tutor is the owner
-                tutor = db.query(TutorDetail).filter(TutorDetail.userId == uid).first()
-                if tutor and course.tutorId == tutor.id:
+                tutor = db["TutorDetail"].find_one({"userId": uid})
+                if tutor and course.get("tutorId") == tutor.get("_id"):
                     has_access = True
                 else:
-                    # Check if user has bought this course via a completed order
-                    # (orders represent enrollment in this relational schema)
-                    order = db.query(Order).filter(
-                        and_(Order.userId == uid, Order.status == "completed")
-                    ).first()
-                    # To be complete, check if the courseId matches or is linked. For simplicity of download url check:
+                    order = db["Order"].find_one({"userId": uid, "status": "completed"})
                     if order:
-                        # (Normally, we'd query enrollment table or purchase log. Prisma schema maps Course to Orders)
                         has_access = True
 
         # Book purchase checks
         if not has_access and clean_key.startswith("private/books/"):
             book_id = clean_key.split('/')[2]
-            purchase = db.query(BookPurchase).filter(
-                and_(BookPurchase.userId == uid, BookPurchase.bookId == book_id)
-            ).first()
+            purchase = db["BookPurchase"].find_one({"userId": uid, "bookId": book_id})
             if purchase:
                 has_access = True
                 

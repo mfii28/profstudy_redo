@@ -1,24 +1,11 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import declarative_base, sessionmaker
+import certifi
+from pymongo import MongoClient
 from app.core.config import settings
 
-connect_args = {}
-if settings.DATABASE_URL.startswith("sqlite"):
-    connect_args = {"check_same_thread": False}
-
-engine = create_engine(
-    settings.DATABASE_URL,
-    connect_args=connect_args,
-    pool_pre_ping=not settings.DATABASE_URL.startswith("sqlite")
-)
-
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-Base = declarative_base()
+client = MongoClient(settings.DATABASE_URL, tlsCAFile=certifi.where())
+# Get default database specified in connection string path, fall back to "studymate"
+db = client.get_default_database("studymate")
 
 def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+    yield db
+

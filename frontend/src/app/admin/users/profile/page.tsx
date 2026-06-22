@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,20 +10,17 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/firebase';
-import { updateProfile, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
-import { type User as AppUser } from '@/lib/db';
-import { getUserById, updateUser } from '@/lib/user-data';
+import { getUserProfileAction, updateUserProfileAction, changeUserPasswordAction } from '@/app/actions/user';
 import { getPresignedUploadUrl } from '@/app/actions/storage';
 import { uploadToR2 } from '@/lib/upload-client';
 import { resolveAvatarUrl } from '@/lib/media-url';
 import { UserCircle, Camera, Loader2, ShieldCheck, Eye, EyeOff, KeyRound, Save } from 'lucide-react';
-import Image from 'next/image';
 
 export default function AdminProfilePage() {
   const { user: adminUser } = useUser();
   const { toast } = useToast();
 
-  const [displayName, setDisplayName] = useState(adminUser?.displayName || '');
+  const [displayName, setDisplayName] = useState('');
   const [bio, setBio] = useState('');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
 
@@ -39,14 +36,25 @@ export default function AdminProfilePage() {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
-  const initials = (adminUser?.displayName || adminUser?.email || 'A').charAt(0).toUpperCase();
+  const initials = (displayName || adminUser?.email || 'A').charAt(0).toUpperCase();
 
-  const updateCurrentUserProfile = async (partial: Partial<AppUser>) => {
-    if (!adminUser) return;
-    const existingProfile = await getUserById(adminUser.uid);
-    if (!existingProfile) throw new Error('User profile not found');
-    await updateUser({ ...existingProfile, ...partial });
-  };
+  useEffect(() => {
+    async function loadProfile() {
+      try {
+        const res = await getUserProfileAction();
+        if (res.success && res.user) {
+          setDisplayName(res.user.name || '');
+          setBio(res.user.bio || '');
+          if (res.user.avatar) {
+            setAvatarPreview(resolveAvatarUrl(res.user.avatar));
+          }
+        }
+      } catch (err: any) {
+        console.error('Failed to load profile:', err);
+      }
+    }
+    loadProfile();
+  }, []);
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -57,7 +65,10 @@ export default function AdminProfilePage() {
       if (error || !key || !url) throw new Error(error || 'Upload sign failed');
       const idToken = await adminUser.getIdToken(true);
       await uploadToR2(url, file, contentType || file.type, { key, idToken });
-      await updateCurrentUserProfile({ avatar: key });
+      
+      const updateRes = await updateUserProfileAction({ avatar: key });
+      if (updateRes.error) throw new Error(updateRes.error);
+
       setAvatarPreview(URL.createObjectURL(file));
       toast({ title: 'Avatar updated' });
     } catch (err: any) {
@@ -73,8 +84,8 @@ export default function AdminProfilePage() {
     if (!displayName.trim()) { toast({ variant: 'destructive', title: 'Display name required' }); return; }
     setIsSavingProfile(true);
     try {
-      await updateProfile(adminUser, { displayName });
-      await updateCurrentUserProfile({ name: displayName, bio });
+      const res = await updateUserProfileAction({ name: displayName, bio });
+      if (res.error) throw new Error(res.error);
       toast({ title: 'Profile updated' });
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Update failed', description: err.message });
@@ -91,18 +102,14 @@ export default function AdminProfilePage() {
 
     setIsChangingPassword(true);
     try {
-      const credential = EmailAuthProvider.credential(adminUser.email, currentPassword);
-      await reauthenticateWithCredential(adminUser, credential);
-      await updatePassword(adminUser, newPassword);
+      const res = await changeUserPasswordAction({ currentPassword, newPassword });
+      if (res.error) throw new Error(res.error);
       toast({ title: 'Password changed successfully' });
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
     } catch (err: any) {
-      const msg = err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential'
-        ? 'Current password is incorrect'
-        : err.message;
-      toast({ variant: 'destructive', title: 'Password change failed', description: msg });
+      toast({ variant: 'destructive', title: 'Password change failed', description: err.message });
     } finally {
       setIsChangingPassword(false);
     }
@@ -129,8 +136,6 @@ export default function AdminProfilePage() {
               <Avatar className="h-20 w-20 border-2 border-muted">
                 {avatarPreview ? (
                   <AvatarImage src={avatarPreview} />
-                ) : adminUser?.photoURL ? (
-                  <AvatarImage src={resolveAvatarUrl(adminUser.photoURL)} />
                 ) : (
                   <AvatarFallback className="text-2xl bg-primary/10 text-primary">{initials}</AvatarFallback>
                 )}
@@ -144,7 +149,7 @@ export default function AdminProfilePage() {
               <input ref={avatarInputRef} type="file" accept="image/*" className="sr-only" onChange={handleAvatarUpload} />
             </div>
             <div>
-              <p className="font-semibold">{adminUser?.displayName || 'Administrator'}</p>
+              <p className="font-semibold">{displayName || 'Administrator'}</p>
               <p className="text-sm text-muted-foreground">{adminUser?.email}</p>
               <Button variant="outline" size="sm" className="mt-2 text-xs gap-1" onClick={() => avatarInputRef.current?.click()}>
                 <Camera size={12} /> Change Photo
@@ -166,7 +171,7 @@ export default function AdminProfilePage() {
             <div className="space-y-2">
               <Label>Email</Label>
               <Input value={adminUser?.email || ''} disabled className="bg-muted/20" />
-              <p className="text-xs text-muted-foreground">Email changes are managed through Firebase Console.</p>
+              <p className="text-xs text-muted-foreground">Email changes are managed by the administrator.</p>
             </div>
           </div>
 

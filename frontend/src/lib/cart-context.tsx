@@ -212,9 +212,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
         cartUnsubscribe();
       };
     } else {
-      setCartItems([]);
+      setCartItems((prev) => prev.length > 0 ? [] : prev);
       hasSyncedCartRef.current = false;
-      setLoading(false);
+      setLoading((prev) => prev ? false : prev);
     }
   }, [user, firestore]);
 

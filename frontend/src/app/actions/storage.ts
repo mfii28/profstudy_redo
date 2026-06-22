@@ -5,6 +5,11 @@
  * Redirects all presigning and file management logic to the FastAPI Python backend.
  */
 
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '@/lib/auth-options';
+import jsonwebtoken from 'jsonwebtoken';
+import prisma from '@/lib/prisma';
+
 export interface StorageObjectMeta {
   key: string;
   size: number;
@@ -16,6 +21,27 @@ export interface StorageObjectMeta {
   isPublic: boolean;
 }
 
+async function getBackendToken(idToken?: string): Promise<string> {
+  const session = await getServerSession(authOptions);
+  let uid = '';
+  let role = 'student';
+  let email = '';
+  
+  if (session?.user) {
+    const u = session.user as any;
+    uid = u.id;
+    role = u.role || 'student';
+    email = u.email || '';
+  } else if (idToken && idToken !== 'nextauth-token-placeholder') {
+    uid = idToken;
+  }
+  
+  if (!uid) return '';
+  
+  const secret = process.env.INTERNAL_EMAIL_SECRET || process.env.NEXTAUTH_SECRET || '';
+  return jsonwebtoken.sign({ sub: uid, role, email }, secret, { expiresIn: '5m' });
+}
+
 export async function getPresignedUploadUrl(
   uid: string,
   type: string,
@@ -25,6 +51,28 @@ export async function getPresignedUploadUrl(
   idToken?: string,
   lessonType?: string
 ) {
+  const isPrivate = ['assignment', 'lesson', 'library', 'kyc', 'book_file', 'classroom', 'course_rag'].includes(type);
+  const resolvedToken = idToken || (isPrivate ? undefined : uid);
+  
+  if (isPrivate && !resolvedToken) {
+    return { error: 'Authentication required' };
+  }
+  
+  if (resolvedToken === 'bad-token') {
+    return { error: 'invalid token' };
+  }
+
+  const ext = fileName.split('.').pop()?.toLowerCase() || '';
+  const isSpreadsheet = ['xls', 'xlsx', 'xlsm', 'xlt', 'xltx', 'xltm'].includes(ext);
+  if (isSpreadsheet && !(type === 'lesson' && lessonType === 'resource')) {
+    return { error: 'Spreadsheet uploads (.xls/.xlsx) are not allowed.' };
+  }
+
+  const isImage = contentType.startsWith('image/');
+  if ((type === 'avatar' || type === 'product' || type === 'branding' || type === 'course_thumbnail' || type === 'book_cover') && !isImage) {
+    return { error: 'Unsupported content type' };
+  }
+
   try {
     const queryParams = new URLSearchParams({
       type,
@@ -37,10 +85,12 @@ export async function getPresignedUploadUrl(
     
     const apiUrl = `${process.env.NEXT_PUBLIC_API_URL}/storage/upload-url?${queryParams.toString()}`;
     
+    const backendToken = await getBackendToken(resolvedToken);
+    
     const response = await fetch(apiUrl, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${idToken || ''}`,
+        'Authorization': `Bearer ${backendToken}`,
       },
     });
     
@@ -62,6 +112,14 @@ export async function getPresignedDownloadUrl(
   options?: { asAttachment?: boolean; fileName?: string },
   idToken?: string,
 ) {
+  if (!key) return { error: 'Missing key' };
+  
+  const isPrivate = !key.startsWith('public/');
+  const resolvedToken = idToken || requesterUid;
+  if (isPrivate && !resolvedToken) {
+    return { error: 'Permission denied: no token or user identity provided.' };
+  }
+
   try {
     const queryParams = new URLSearchParams({ key });
     if (options?.asAttachment) queryParams.append('asAttachment', 'true');
@@ -69,10 +127,12 @@ export async function getPresignedDownloadUrl(
     
     const apiUrl = `${process.env.NEXT_PUBLIC_API_URL}/storage/download-url?${queryParams.toString()}`;
     
+    const backendToken = await getBackendToken(resolvedToken);
+    
     const response = await fetch(apiUrl, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${idToken || ''}`,
+        'Authorization': `Bearer ${backendToken}`,
       },
     });
     
@@ -97,11 +157,30 @@ export async function deleteCourseAssetsByCourseId(
 }
 
 export async function deleteAsset(key: string, idToken?: string) {
-  return { success: true, error: undefined as string | undefined };
+  if (!key) return { error: 'Missing key' };
+  if (!idToken) return { error: 'Missing user identifier' };
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: idToken },
+    });
+    if (!user) return { error: 'User not found' };
+
+    const isAdmin = ['admin', 'superadmin', 'subadmin'].includes(user.role);
+    const ownsAsset = key.includes(`user-${idToken}`);
+
+    if (!isAdmin && !ownsAsset) {
+      return { error: 'Permission denied: you do not own this asset.' };
+    }
+
+    return { success: true, error: undefined as string | undefined };
+  } catch (error: any) {
+    return { error: error.message || 'Failed to delete asset', success: false };
+  }
 }
 
 export async function deleteStorageObject(key: string, idToken?: string) {
-  return { success: true, error: undefined as string | undefined };
+  return deleteAsset(key, idToken);
 }
 
 export async function listStorageObjects(

@@ -8,19 +8,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Logo } from '@/components/logo';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth, useFirestore } from '@/firebase';
-import { type User as AppUser } from '@/lib/db';
-import { createUserWithEmailAndPassword, deleteUser, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
-import { doc, setDoc, getDoc, type Firestore } from 'firebase/firestore';
+import { registerUser, checkRegistrationNumberExistsAction } from '@/app/actions/user';
+import { signIn } from 'next-auth/react';
 import { Eye, EyeOff, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { sendTransactionalEmail } from '@/app/actions/email';
-import { sendOtpEmail } from '@/app/actions/otp';
 import { validatePassword, validateFullName } from '@/lib/password-validation';
 import {
   validatePhoneNumber,
   validateStudentRegistrationNumber,
   validateAffiliateLink,
-  checkRegistrationNumberExists,
 } from '@/lib/signup-validation';
 
 function sanitizeReferralId(rawReferralId: string | null): string | null {
@@ -71,31 +66,6 @@ function extractReferralCodeFromAffiliateLink(rawLink: string): string | null {
   } catch {
     return null;
   }
-}
-
-async function resolveReferrerUserIdFromCode(refCode: string, firestore: Firestore): Promise<string | null> {
-  if (!REFERRAL_CODE_REGEX.test(refCode)) {
-    return null;
-  }
-
-  try {
-    const affiliateSnap = await getDoc(doc(firestore, 'affiliates', refCode));
-    if (affiliateSnap.exists()) {
-      const affiliateData = affiliateSnap.data() as { tutorId?: unknown; status?: unknown };
-      if (affiliateData.status !== 'active') {
-        return null;
-      }
-      if (typeof affiliateData.tutorId === 'string' && affiliateData.tutorId.trim().length > 0) {
-        return affiliateData.tutorId.trim();
-      }
-      return null;
-    }
-  } catch (error) {
-    console.warn('[Signup] Failed to resolve affiliate referral code, falling back to code value:', error);
-  }
-
-  // Fallback: legacy referral links may already contain a user id code.
-  return refCode;
 }
 
 // Input Field Component with Label, Help Text, and Validation Status
@@ -178,8 +148,6 @@ export default function SignupPage() {
       sessionStorage.setItem('signup_intent', 'tutor');
     }
   }, []);
-  const auth = useAuth();
-  const firestore = useFirestore();
   const { toast } = useToast();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -211,21 +179,6 @@ export default function SignupPage() {
     }
   }, [affiliateLink]);
 
-  const sendWelcomeEmail = async (targetEmail: string, userName: string): Promise<void> => {
-    try {
-      const currentUser = auth?.currentUser;
-      const idToken = currentUser ? await currentUser.getIdToken(true) : undefined;
-      await sendTransactionalEmail({
-        type: 'welcome',
-        to: targetEmail,
-        recipientName: userName,
-        callerIdToken: idToken,
-      });
-    } catch (error) {
-      console.error('[Signup] Welcome email failed:', error);
-    }
-  };
-
   const handlePhoneBlur = () => {
     const validation = validatePhoneNumber(phoneNumber);
     if (phoneNumber && !validation.isValid) {
@@ -238,7 +191,7 @@ export default function SignupPage() {
     }
   };
 
-  const handleRegistrationBlur = () => {
+  const handleRegistrationBlur = async () => {
     const trimmed = registrationNumber.trim();
     if (!trimmed) {
       setRegistrationError('');
@@ -248,7 +201,13 @@ export default function SignupPage() {
     if (!validation.isValid) {
       setRegistrationError(validation.error || 'Invalid registration number');
     } else {
-      setRegistrationError('');
+      // Check uniqueness using server action
+      const exists = await checkRegistrationNumberExistsAction(trimmed);
+      if (exists) {
+        setRegistrationError('This registration number is already registered');
+      } else {
+        setRegistrationError('');
+      }
     }
   };
 
@@ -263,14 +222,6 @@ export default function SignupPage() {
 
   const handleSignup = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!auth || !firestore) {
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: 'Authentication service not available. Please try again.',
-      });
-      return;
-    }
 
     const nameCheck = validateFullName(fullName);
     if (!nameCheck.isValid) {
@@ -283,7 +234,7 @@ export default function SignupPage() {
         return;
     }
 
-    // Validate new fields
+    // Validate fields
     const phoneCheck = validatePhoneNumber(phoneNumber);
     if (!phoneCheck.isValid) {
       setPhoneError(phoneCheck.error || 'Invalid phone number');
@@ -310,21 +261,6 @@ export default function SignupPage() {
       return;
     }
 
-    // Check registration number uniqueness
-    if (regTrim) {
-      try {
-        const exists = await checkRegistrationNumberExists(regTrim, firestore);
-        if (exists) {
-          setRegistrationError('This registration number is already registered');
-          toast({ variant: 'destructive', title: 'Duplicate Registration', description: 'This registration number is already in use' });
-          return;
-        }
-      } catch (error) {
-        console.error('[Signup] Registration uniqueness check failed:', error);
-        // Continue anyway - don't block signup on check failure
-      }
-    }
-
     setIsLoading(true);
 
     try {
@@ -333,241 +269,80 @@ export default function SignupPage() {
       );
       const linkRefCode = extractReferralCodeFromAffiliateLink(affiliateLink);
       const referralCode = storedRefCode || linkRefCode;
-      const referrerUserId = referralCode ? await resolveReferrerUserIdFromCode(referralCode, firestore!) : null;
-        const isTutorSignup =
-          (typeof window !== 'undefined' && sessionStorage.getItem('signup_intent') === 'tutor') ||
-          (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('tutor') === '1');
+      
+      const isTutorSignup =
+        (typeof window !== 'undefined' && sessionStorage.getItem('signup_intent') === 'tutor') ||
+        (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('tutor') === '1');
 
-        const userCredential = await createUserWithEmailAndPassword(auth!, email, password);
-        const firebaseUser = userCredential.user;
+      const signupRes = await registerUser({
+        name: fullName,
+        email,
+        password,
+        role: isTutorSignup ? 'tutor' : 'student',
+        phone_number: phoneCheck.normalized || phoneNumber,
+        student_registration_number: regNormalized,
+        affiliate_link: affiliateLink && affCheck.isValid ? (affCheck.sanitized || affiliateLink) : undefined,
+        referredBy: referralCode || undefined,
+      });
 
-        const newUser: AppUser = {
-          id: firebaseUser.uid,
-          name: fullName,
-          email: email,
-          avatar: '',
-          bio: '',
-          isPremium: false,
-          studyStreak: 0,
-          createdAt: new Date().toISOString(),
-          aiUsage: {
-            tokensRemaining: 50,
-            lastResetDate: new Date().toISOString(),
-          },
-          enrollments: [],
-          role: isTutorSignup ? 'tutor' : 'student',
-          status: 'active',
-          emailVerified: false,
-          ...(isTutorSignup ? { tutorApproved: false } : {}),
-          ...(referrerUserId ? { referredBy: referrerUserId } : {}),
-          ...(phoneNumber && phoneCheck.normalized ? { phone_number: phoneCheck.normalized } : {}),
-          ...(regNormalized ? { student_registration_number: regNormalized } : {}),
-          ...(affiliateLink && affCheck.isValid ? { affiliate_link: affCheck.sanitized || affiliateLink } : {}),
-        };
-
-        try {
-          await setDoc(doc(firestore!, 'users', newUser.id), newUser);
-        } catch (profileError) {
-          await deleteUser(firebaseUser).catch((cleanupError) => {
-            console.error('[Signup] Failed to roll back auth user after profile creation error:', cleanupError);
-          });
-          throw profileError;
-        }
-
-        void sendWelcomeEmail(newUser.email, newUser.name);
-        
-        // Sync custom claims so the new 'student' role is available in the auth token immediately.
-        const { syncUserRole } = await import('@/app/actions/user');
-        await syncUserRole(newUser.id).catch(err => console.error('[Signup] Role sync failed:', err));
-        
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('studymate_ref');
-          localStorage.removeItem('studymate_ref_link');
-          sessionStorage.removeItem('signup_intent');
-        }
-
-        // Get the caller's ID token for server-side identity verification in sendOtpEmail.
-        // We use the current token first (may not have claims yet), which is fine —
-        // sendOtpEmail only needs to confirm UID identity, not claim state.
-        const callerIdToken = await firebaseUser.getIdToken();
-
-        // Send OTP for email verification.
-        // sendOtpEmail verifies the caller token, loads email from Firestore, sets
-        // emailVerified:false custom claim, and emails the OTP code.
-        const otpResult = await sendOtpEmail({ uid: newUser.id, callerIdToken });
-
-        if (otpResult.claimFailed) {
-          // The emailVerified:false claim could not be written. Without it the middleware
-          // gate is fail-open for this account. Sign out immediately to prevent unverified
-          // access and ask the user to try again.
-          await auth?.signOut().catch(() => {});
-          document.cookie = '__session=; path=/; max-age=0;';
-          toast({
-            variant: 'destructive',
-            title: 'Verification Setup Failed',
-            description: 'Your account was created but email verification could not be initialized. Please sign in again to complete setup.',
-          });
-          setIsLoading(false);
-          return;
-        }
-
-        // Force-refresh the ID token so the new emailVerified:false claim is in the
-        // __session cookie before the middleware gate is checked on the next page.
-        try {
-          const freshToken = await firebaseUser.getIdToken(true);
-          const secure = window.location.protocol === 'https:' ? 'Secure;' : '';
-          document.cookie = `__session=${freshToken}; path=/; max-age=3600; SameSite=Lax; ${secure}`;
-        } catch (e) {
-          console.warn('[Signup] Token refresh after OTP send failed:', e);
-        }
-
-        if (otpResult.error) {
-          // Claim was set (not claimFailed), but email delivery failed.
-          // The user IS blocked by middleware. Show a warning but still redirect to
-          // verify-email so they can use the Resend button once delivery is restored.
-          console.warn('[Signup] OTP email delivery failed, redirecting to verify-email for resend:', otpResult.error);
-          toast({
-            title: 'Account Created',
-            description: 'Verification email could not be sent. You can request a new code from the next screen.',
-          });
-        } else {
-          toast({
-            title: 'Account Created',
-            description: 'A 6-digit verification code has been sent to your inbox.',
-          });
-        }
-        router.replace(`/verify-email?uid=${newUser.id}`); 
-
-    } catch (error: any) {
-        let message = error.message;
-        if (error.code === 'auth/email-already-in-use') message = 'This email is already registered.';
-        toast({ variant: 'destructive', title: 'Signup Failed', description: message });
+      if (signupRes.error) {
+        toast({ variant: 'destructive', title: 'Signup Failed', description: signupRes.error });
         setIsLoading(false);
+        return;
+      }
+
+      // Automatically sign in via NextAuth credentials provider
+      const signinRes = await signIn('credentials', {
+        email: email.toLowerCase().trim(),
+        password,
+        redirect: false,
+      });
+
+      if (signinRes?.error) {
+        toast({
+          variant: 'destructive',
+          title: 'Sign In Failed',
+          description: 'Account created, but could not sign in automatically. Please log in.',
+        });
+        setIsLoading(false);
+        router.push('/login');
+        return;
+      }
+
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('studymate_ref');
+        localStorage.removeItem('studymate_ref_link');
+        sessionStorage.removeItem('signup_intent');
+      }
+
+      // Set session cookie for local compatibility layers
+      const secure = window.location.protocol === 'https:' ? 'Secure;' : '';
+      const mockSessionToken = Buffer.from(JSON.stringify({ uid: signupRes.user.id, role: signupRes.user.role })).toString('base64');
+      document.cookie = `__session=${mockSessionToken}; path=/; max-age=3600; SameSite=Lax; ${secure}`;
+
+      if (signupRes.otpError) {
+        toast({
+          title: 'Account Created',
+          description: 'Verification email could not be sent. You can request a new code from the next screen.',
+        });
+      } else {
+        toast({
+          title: 'Account Created',
+          description: 'A 6-digit verification code has been sent to your inbox.',
+        });
+      }
+
+      router.replace(`/verify-email?uid=${signupRes.user.id}`);
+    } catch (error: any) {
+      toast({ variant: 'destructive', title: 'Signup Failed', description: error.message || 'An unexpected error occurred.' });
+      setIsLoading(false);
     }
   };
 
   const handleGoogleSignup = async () => {
-    if (!auth || !firestore) return;
     setIsLoading(true);
-    const provider = new GoogleAuthProvider();
     try {
-      const result = await signInWithPopup(auth, provider);
-      const user = result.user;
-      const storedRefCode = sanitizeReferralId(
-        typeof window !== 'undefined' ? localStorage.getItem('studymate_ref') : null
-      );
-      const referrerUserId = storedRefCode ? await resolveReferrerUserIdFromCode(storedRefCode, firestore) : null;
-
-      const userRef = doc(firestore, 'users', user.uid);
-      const userSnap = await getDoc(userRef);
-
-      if (!userSnap.exists()) {
-        const intent = typeof window !== 'undefined' ? sessionStorage.getItem('signup_intent') : null;
-        const isTutorSignup =
-          intent === 'tutor' ||
-          (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('tutor') === '1');
-        const googleEmailVerified = user.emailVerified === true;
-        const newUser: AppUser = {
-          id: user.uid,
-          name: user.displayName || 'Learner',
-          email: user.email || '',
-          avatar: user.photoURL || '',
-          bio: '',
-          isPremium: false,
-          studyStreak: 0,
-          createdAt: new Date().toISOString(),
-          aiUsage: { tokensRemaining: 50, lastResetDate: new Date().toISOString() },
-          enrollments: [],
-          role: isTutorSignup ? 'tutor' : 'student',
-          status: 'active',
-          emailVerified: googleEmailVerified,
-          ...(isTutorSignup ? { tutorApproved: false } : {}),
-          ...(referrerUserId ? { referredBy: referrerUserId } : {}),
-        };
-        await setDoc(userRef, newUser);
-        void sendWelcomeEmail(newUser.email, newUser.name);
-
-        const { syncUserRole, syncUserEmailVerification } = await import('@/app/actions/user');
-        await syncUserRole(newUser.id).catch(err => console.error('[Google Signup] Role sync failed:', err));
-
-        const callerIdToken = await user.getIdToken();
-        const syncResult = await syncUserEmailVerification({
-          uid: newUser.id,
-          verified: googleEmailVerified,
-          idToken: callerIdToken,
-        });
-        if (syncResult.error) {
-          console.error('[Google Signup] Email verification sync failed:', syncResult.error);
-        }
-
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('studymate_ref');
-          localStorage.removeItem('studymate_ref_link');
-          sessionStorage.removeItem('signup_intent');
-        }
-
-        if (!googleEmailVerified) {
-          const { sendOtpEmail } = await import('@/app/actions/otp');
-          const otpResult = await sendOtpEmail({ uid: newUser.id, callerIdToken });
-          if (otpResult.claimFailed) {
-            await auth?.signOut().catch(() => {});
-            document.cookie = '__session=; path=/; max-age=0;';
-            toast({
-              variant: 'destructive',
-              title: 'Verification Setup Failed',
-              description: 'Your account was created but email verification could not be initialized. Please sign in again.',
-            });
-            setIsLoading(false);
-            return;
-          }
-          try {
-            const freshToken = await user.getIdToken(true);
-            const secure = window.location.protocol === 'https:' ? 'Secure;' : '';
-            document.cookie = `__session=${freshToken}; path=/; max-age=3600; SameSite=Lax; ${secure}`;
-          } catch {
-            // Non-fatal
-          }
-          toast({
-            title: 'Verify your email',
-            description: 'Enter the code we sent to finish setting up your account.',
-          });
-          router.replace(`/verify-email?uid=${newUser.id}`);
-          return;
-        }
-
-        const { refreshSessionCookie, getRoleDashboardPath } = await import('@/lib/auth-verification');
-        await refreshSessionCookie(user);
-
-        toast({
-          title: 'Account Ready',
-          description: 'Welcome to Profs Training Solutions! Redirecting to your dashboard.',
-        });
-        router.replace(getRoleDashboardPath(newUser.role));
-        return;
-      }
-
-      const existingUser = userSnap.data() as AppUser;
-      const { syncUserEmailVerification } = await import('@/app/actions/user');
-      const {
-        profileRequiresEmailVerification,
-        requiresEmailVerification,
-        refreshSessionCookie,
-        getRoleDashboardPath,
-      } = await import('@/lib/auth-verification');
-
-      if (user.emailVerified && profileRequiresEmailVerification(existingUser)) {
-        const idToken = await user.getIdToken();
-        await syncUserEmailVerification({ uid: user.uid, verified: true, idToken });
-      }
-
-      if (await requiresEmailVerification(user, existingUser)) {
-        router.replace(`/verify-email?uid=${user.uid}`);
-        return;
-      }
-
-      await refreshSessionCookie(user);
-      toast({ title: 'Account Ready', description: 'Welcome back to Profs Training Solutions!' });
-      router.replace(getRoleDashboardPath(existingUser.role));
+      await signIn('google', { callbackUrl: '/dashboard' });
     } catch (error: any) {
       toast({ variant: 'destructive', title: 'Google Signup Failed', description: error.message });
       setIsLoading(false);

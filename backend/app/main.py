@@ -1,7 +1,5 @@
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
-from sqlalchemy.sql import text
 from app.core.config import settings
 from app.core.database import get_db
 from app.api.v1.endpoints.storage import router as storage_router
@@ -38,11 +36,12 @@ def read_root():
     return {"message": "Welcome to StudyMate API"}
 
 @app.get("/health")
-def health_check(db: Session = Depends(get_db)):
+def health_check(db = Depends(get_db)):
     # Verify Database Connection
     db_status = "healthy"
     try:
-        db.execute(text("SELECT 1"))
+        # MongoDB ping command to check connectivity
+        db.command("ping")
     except Exception as e:
         db_status = f"unhealthy: {str(e)}"
         
@@ -54,3 +53,4 @@ def health_check(db: Session = Depends(get_db)):
         "database": db_status,
         "storage_r2": r2_status
     }
+

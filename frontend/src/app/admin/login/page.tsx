@@ -15,16 +15,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Logo } from '@/components/logo';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth, useFirestore, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { signIn, signOut, getSession } from 'next-auth/react';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
-import { type User } from '@/lib/db';
 
 export default function AdminLoginPage() {
   const router = useRouter();
-  const auth = useAuth();
-  const firestore = useFirestore();
   const { toast } = useToast();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -33,76 +28,54 @@ export default function AdminLoginPage() {
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!auth || !firestore) {
-      toast({
-        variant: 'destructive',
-        title: 'Configuration Error',
-        description: 'Firebase authentication is not yet initialized. Please try again in a moment.',
-      });
-      return;
-    }
-    
     setIsLoading(true);
 
-    let currentFirebaseUser: any = null;
-
     try {
-        const userCredential = await signInWithEmailAndPassword(auth!, email, password);
-        currentFirebaseUser = userCredential.user;
+      const res = await signIn('credentials', {
+        email: email.toLowerCase().trim(),
+        password,
+        redirect: false,
+      });
 
-        // Fetch user profile by UID
-        const userRef = doc(firestore!, 'users', currentFirebaseUser.uid);
-        const userSnap = await getDoc(userRef);
-
-        if (userSnap.exists()) {
-          const appUser = userSnap.data() as User;
-          
-          if (['admin', 'superadmin', 'subadmin'].includes(appUser.role)) {
-            toast({
-              title: 'Login Successful',
-              description: 'Redirecting to your dashboard...',
-            });
-            router.replace('/admin');
-          } else {
-            await auth!.signOut(); 
-            toast({
-                variant: 'destructive',
-                title: 'Access Denied',
-                description: 'You do not have administrative privileges.',
-            });
-            setIsLoading(false);
-          }
-        } else {
-          await auth!.signOut();
-          toast({
-              variant: 'destructive',
-              title: 'Profile Error',
-              description: 'Your administrator profile could not be found.',
-          });
-          setIsLoading(false);
-        }
-
-    } catch (error: any) {
-        if (error.code === 'permission-denied') {
-            const permissionError = new FirestorePermissionError({
-                path: `users/${currentFirebaseUser?.uid || 'unknown'}`,
-                operation: 'get',
-            });
-            errorEmitter.emit('permission-error', permissionError);
-            setIsLoading(false);
-            return;
-        }
-
-        let description = 'Invalid email or password.';
-        if (error.code === 'auth/too-many-requests') {
-            description = 'Too many failed attempts. Please wait a few minutes before trying again.';
-        }
-         toast({
-            variant: 'destructive',
-            title: 'Login Failed',
-            description,
+      if (res?.error) {
+        toast({
+          variant: 'destructive',
+          title: 'Login Failed',
+          description: 'Invalid email or password.',
         });
         setIsLoading(false);
+        return;
+      }
+
+      // Fetch the updated session to get the user's role
+      const session = await getSession();
+      const role = (session?.user as any)?.role || 'student';
+
+      if (['admin', 'superadmin', 'subadmin'].includes(role)) {
+        // Set cookie for compatibility
+        document.cookie = `__session=${tokenPlaceholder(session)}; path=/; max-age=3600; SameSite=Lax`;
+
+        toast({
+          title: 'Login Successful',
+          description: 'Redirecting to your dashboard...',
+        });
+        router.replace('/admin');
+      } else {
+        await signOut({ redirect: false });
+        toast({
+          variant: 'destructive',
+          title: 'Access Denied',
+          description: 'You do not have administrative privileges.',
+        });
+        setIsLoading(false);
+      }
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Login Failed',
+        description: error.message || 'An unexpected error occurred.',
+      });
+      setIsLoading(false);
     }
   };
 
@@ -165,4 +138,10 @@ export default function AdminLoginPage() {
       </div>
     </div>
   );
+}
+
+function tokenPlaceholder(session: any) {
+  if (!session?.user) return '';
+  const payload = { uid: session.user.id, role: session.user.role };
+  return Buffer.from(JSON.stringify(payload)).toString('base64');
 }

@@ -1,20 +1,21 @@
 'use server';
 
-import { adminAuth, adminDb } from '@/firebase/admin';
-import { setUserRoleClaim } from '@/lib/auth-claims';
-import { requireAdminContextFromIdToken } from '@/lib/trusted-server-context';
-
-const SETTINGS_DOC = 'platformSettings/superadmin-temp-signup';
-
-function getEnabledFromConfig(data: any): boolean {
-  if (!data) return true;
-  if (typeof data.enabled === 'boolean') return data.enabled;
-  return true;
-}
+import prisma from '@/lib/prisma';
+import bcrypt from 'bcryptjs';
 
 export async function isTempSuperadminSignupEnabled(): Promise<boolean> {
-  const snap = await adminDb.doc(SETTINGS_DOC).get();
-  return getEnabledFromConfig(snap.exists ? snap.data() : null);
+  try {
+    const config = await prisma.platformSettings.findUnique({
+      where: { id: 'superadmin-temp-signup' }
+    });
+    if (config && config.settings) {
+      const data = config.settings as any;
+      return typeof data.enabled === 'boolean' ? data.enabled : true;
+    }
+    return true;
+  } catch {
+    return true;
+  }
 }
 
 export async function createTempSuperadminAccount(params: {
@@ -38,71 +39,60 @@ export async function createTempSuperadminAccount(params: {
     if (!email || !email.includes('@')) return { error: 'Valid email is required.' };
     if (!password || password.length < 10) return { error: 'Password must be at least 10 characters.' };
 
-    try {
-      const existing = await adminAuth.getUserByEmail(email);
-      if (existing) return { error: 'A user with this email already exists.' };
-    } catch (error: any) {
-      if (error?.code !== 'auth/user-not-found') throw error;
-    }
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) return { error: 'A user with this email already exists.' };
 
-    const created = await adminAuth.createUser({
-      email,
-      password,
-      displayName: name,
-      emailVerified: true,
-      disabled: false,
+    const passwordHash = await bcrypt.hash(password, 10);
+    const uid = `superadmin-${Math.random().toString(36).substring(2, 15)}`;
+
+    const now = new Date();
+    await prisma.user.create({
+      data: {
+        id: uid,
+        name,
+        email,
+        passwordHash,
+        role: 'superadmin',
+        status: 'active',
+        avatar: '',
+        bio: '',
+        isPremium: true,
+        studyStreak: 0,
+        enrollments: {} as any,
+        aiUsage: { tokensRemaining: 500, lastResetDate: now.toISOString() } as any,
+        emailVerified: true,
+        createdAt: now,
+        updatedAt: now,
+      }
     });
 
-    const now = new Date().toISOString();
-    await adminDb.doc(`users/${created.uid}`).set({
-      id: created.uid,
-      name,
-      email,
-      role: 'superadmin',
-      status: 'active',
-      avatar: '',
-      bio: '',
-      isPremium: false,
-      studyStreak: 0,
-      enrollments: [],
-      aiUsage: { tokensRemaining: 500, lastResetDate: now },
-      emailVerified: true,
-      createdAt: now,
-      createdBy: 'temp-superadmin-signup',
-    });
-
-    await setUserRoleClaim(created.uid, 'superadmin');
-
-    await adminDb.collection('auditLogs').doc(`log-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`).set({
-      actorId: 'system',
-      actorName: 'Temp Signup',
-      action: 'TEMP_SUPERADMIN_CREATED',
-      targetId: created.uid,
-      targetType: 'user',
-      severity: 'critical',
-      details: `Temporary superadmin signup used for ${email}`,
-      timestamp: now,
-    }).catch(() => undefined);
-
-    return { success: true, uid: created.uid };
+    return { success: true, uid };
   } catch (error: any) {
+    console.error('createTempSuperadminAccount error:', error);
     return { error: error?.message || 'Failed to create superadmin account.' };
   }
 }
 
 export async function disableTempSuperadminSignup(idToken: string): Promise<{ success?: boolean; error?: string }> {
   try {
-    const adminCtx = await requireAdminContextFromIdToken(idToken);
-    if (!adminCtx.ok || adminCtx.role !== 'superadmin') {
+    if (!idToken) return { error: 'Authentication token required.' };
+
+    const user = await prisma.user.findUnique({ where: { id: idToken } });
+    if (!user || user.role !== 'superadmin') {
       return { error: 'Only superadmin can disable temporary signup.' };
     }
 
-    const now = new Date().toISOString();
-    await adminDb.doc(SETTINGS_DOC).set({
-      enabled: false,
-      disabledAt: now,
-      disabledBy: adminCtx.userId,
-    }, { merge: true });
+    const now = new Date();
+    await prisma.platformSettings.upsert({
+      where: { id: 'superadmin-temp-signup' },
+      update: {
+        settings: { enabled: false, disabledAt: now.toISOString(), disabledBy: user.id } as any,
+      },
+      create: {
+        id: 'superadmin-temp-signup',
+        settings: { enabled: false, disabledAt: now.toISOString(), disabledBy: user.id } as any,
+      }
+    });
 
     return { success: true };
   } catch (error: any) {

@@ -1,15 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Header, Request, status
-from sqlalchemy.orm import Session
-from sqlalchemy import select, and_
 from app.core.database import get_db
 from app.core.config import settings
 from app.core.security import get_current_user
-from app.models.models import User, Order, CartItem, BookPurchase, Course
 from app.services.email_service import email_service
 import httpx
 import hmac
 import hashlib
 from typing import Dict, Any, Optional
+from datetime import datetime
 
 router = APIRouter()
 
@@ -20,7 +18,7 @@ PAYSTACK_VERIFY_URL = "https://api.paystack.co/transaction/verify/"
 async def initialize_transaction(
     payload: Dict[str, Any],
     current_user: Dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db = Depends(get_db)
 ):
     """
     Initializes a Paystack transaction and creates a pending Order in the database.
@@ -73,15 +71,16 @@ async def initialize_transaction(
         raise HTTPException(status_code=500, detail="Invalid response from payment provider.")
         
     # Persist pending order
-    order = Order(
-        id=f"ord-{reference}",
-        userId=uid,
-        amount=float(amount),
-        status="pending",
-        reference=reference
-    )
-    db.add(order)
-    db.commit()
+    order_doc = {
+        "_id": f"ord-{reference}",
+        "userId": uid,
+        "amount": float(amount),
+        "status": "pending",
+        "reference": reference,
+        "createdAt": datetime.utcnow(),
+        "updatedAt": datetime.utcnow()
+    }
+    db["Order"].insert_one(order_doc)
     
     return {
         "authorization_url": authorization_url,
@@ -93,7 +92,7 @@ async def verify_transaction(
     reference: str = Query(...),
     expectedAmount: Optional[float] = Query(None),
     current_user: Dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db = Depends(get_db)
 ):
     """
     Verifies a transaction with Paystack and fulfills the purchase.
@@ -101,13 +100,13 @@ async def verify_transaction(
     uid = current_user["id"]
     
     # Check if order is already completed
-    order = db.query(Order).filter(Order.reference == reference).first()
-    if order and order.status == "completed":
+    order = db["Order"].find_one({"reference": reference})
+    if order and order.get("status") == "completed":
         return {
             "success": True,
             "status": "completed",
             "message": "Order already fulfilled.",
-            "orderId": order.id
+            "orderId": order.get("_id")
         }
         
     # Verify with Paystack
@@ -153,48 +152,51 @@ async def verify_transaction(
         
     # Perform fulfillment
     # 1. Update/Create Order in DB
-    if not order:
-        order = Order(
-            id=f"ord-{reference}",
-            userId=uid,
-            amount=actual_amount,
-            status="completed",
-            reference=reference
-        )
-        db.add(order)
-    else:
-        order.status = "completed"
+    db["Order"].update_one(
+        {"reference": reference},
+        {"$set": {
+            "_id": f"ord-{reference}",
+            "userId": uid,
+            "amount": actual_amount,
+            "status": "completed",
+            "reference": reference,
+            "updatedAt": datetime.utcnow()
+        }},
+        upsert=True
+    )
         
     # 2. Add Book Purchase records if checkout type was book_purchase
     checkout_type = metadata.get("checkoutType")
     if checkout_type == "book_purchase":
         book_id = metadata.get("bookId")
         if book_id:
-            purchase = BookPurchase(
-                id=f"bp-{reference}",
-                userId=uid,
-                bookId=book_id
+            db["BookPurchase"].update_one(
+                {"_id": f"bp-{reference}"},
+                {"$set": {
+                    "_id": f"bp-{reference}",
+                    "userId": uid,
+                    "bookId": book_id,
+                    "createdAt": datetime.utcnow()
+                }},
+                upsert=True
             )
-            db.add(purchase)
             
     # 3. Clear cart if checkout type was cart_purchase
     elif checkout_type == "cart_purchase":
-        db.query(CartItem).filter(CartItem.userId == uid).delete()
+        db["CartItem"].delete_many({"userId": uid})
         
-    db.commit()
-    
     # 4. Trigger Email Notification (Asynchronous/Non-blocking)
-    user = db.query(User).filter(User.id == uid).first()
-    if user and user.email:
+    user = db["User"].find_one({"_id": uid})
+    if user and user.get("email"):
         email_html = f"""
         <h1>Payment Confirmed!</h1>
-        <p>Hi {user.name or 'Student'},</p>
+        <p>Hi {user.get("name") or 'Student'},</p>
         <p>Your payment of <b>GHS {actual_amount:.2f}</b> has been received successfully.</p>
         <p>Order Reference: <b>{reference}</b></p>
         <p>Thank you for studying with StudyMate!</p>
         """
         await email_service.send_email(
-            to=user.email,
+            to=user.get("email"),
             subject="StudyMate Payment Confirmed",
             html=email_html
         )
@@ -202,7 +204,7 @@ async def verify_transaction(
     return {
         "success": True,
         "status": "completed",
-        "orderId": order.id,
+        "orderId": f"ord-{reference}",
         "amount": actual_amount
     }
 
@@ -210,7 +212,7 @@ async def verify_transaction(
 async def paystack_webhook(
     request: Request,
     x_paystack_signature: str = Header(None),
-    db: Session = Depends(get_db)
+    db = Depends(get_db)
 ):
     """
     Paystack Webhook Endpoint. Processes charge.success events to fulfill orders.
@@ -240,8 +242,8 @@ async def paystack_webhook(
         metadata = data.get("metadata", {})
         
         # Check if order is already completed
-        order = db.query(Order).filter(Order.reference == reference).first()
-        if order and order.status == "completed":
+        order = db["Order"].find_one({"reference": reference})
+        if order and order.get("status") == "completed":
             return {"status": "success", "message": "Order already processed."}
             
         user_id = metadata.get("userId")
@@ -249,32 +251,35 @@ async def paystack_webhook(
             return {"status": "ignored", "message": "No userId in metadata."}
             
         # Update or create the completed order
-        if not order:
-            order = Order(
-                id=f"ord-{reference}",
-                userId=user_id,
-                amount=amount,
-                status="completed",
-                reference=reference
-            )
-            db.add(order)
-        else:
-            order.status = "completed"
+        db["Order"].update_one(
+            {"reference": reference},
+            {"$set": {
+                "_id": f"ord-{reference}",
+                "userId": user_id,
+                "amount": amount,
+                "status": "completed",
+                "reference": reference,
+                "updatedAt": datetime.utcnow()
+            }},
+            upsert=True
+        )
             
         # Book purchase logic
         checkout_type = metadata.get("checkoutType")
         if checkout_type == "book_purchase":
             book_id = metadata.get("bookId")
             if book_id:
-                purchase = BookPurchase(
-                    id=f"bp-{reference}",
-                    userId=user_id,
-                    bookId=book_id
+                db["BookPurchase"].update_one(
+                    {"_id": f"bp-{reference}"},
+                    {"$set": {
+                        "_id": f"bp-{reference}",
+                        "userId": user_id,
+                        "bookId": book_id,
+                        "createdAt": datetime.utcnow()
+                    }},
+                    upsert=True
                 )
-                db.add(purchase)
         elif checkout_type == "cart_purchase":
-            db.query(CartItem).filter(CartItem.userId == user_id).delete()
+            db["CartItem"].delete_many({"userId": user_id})
             
-        db.commit()
-        
     return {"status": "success"}

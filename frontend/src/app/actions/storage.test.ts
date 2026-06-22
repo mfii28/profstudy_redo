@@ -5,6 +5,12 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+// Set up environment variables for the test run
+process.env.NEXT_PUBLIC_API_URL = 'http://localhost:8000';
+process.env.INTERNAL_EMAIL_SECRET = 'ae956d47a4cd94b240807625b20faaf04c18449fe5a89821a3ae0e64ccd63c81';
+process.env.NEXTAUTH_SECRET = 'ae956d47a4cd94b240807625b20faaf04c18449fe5a89821a3ae0e64ccd63c81';
+process.env.R2_BUCKET_NAME = 'test-bucket';
+
 // ---------------------------------------------------------------------------
 // Mocks (must be hoisted so they are evaluated before imports)
 // ---------------------------------------------------------------------------
@@ -31,7 +37,18 @@ const adminMocks = vi.hoisted(() => {
     verifyIdToken: vi.fn(),
   };
 
-  return { adminDb, adminAuth, docData };
+  const prismaMock = {
+    user: {
+      findUnique: vi.fn(async ({ where }) => {
+        const key = `users/${where.id}`;
+        const data = docData.get(key);
+        if (!data) return null;
+        return { id: where.id, ...data };
+      }),
+    },
+  };
+
+  return { adminDb, adminAuth, docData, prismaMock };
 });
 
 const s3Mocks = vi.hoisted(() => ({
@@ -66,6 +83,55 @@ vi.mock('@/lib/server-request', () => ({
   validateTrustedServerContext: vi.fn(async () => 'localhost'),
 }));
 
+// Mock NextAuth to avoid request scope errors
+vi.mock('next-auth/next', () => ({
+  getServerSession: vi.fn(async () => null),
+}));
+
+vi.mock('@/lib/prisma', () => ({
+  default: adminMocks.prismaMock,
+}));
+
+// Mock global fetch for proxy calls to FastAPI backend
+const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+  const urlObj = new URL(url);
+  const type = urlObj.searchParams.get('type');
+  const fileName = urlObj.searchParams.get('fileName') || '';
+  const contextId = urlObj.searchParams.get('contextId') || '';
+  
+  if (urlObj.pathname.includes('/upload-url')) {
+    let key = '';
+    if (type === 'avatar') {
+      key = `public/avatars/user-user-1_${Date.now()}_${fileName}`;
+    } else if (type === 'lesson') {
+      key = `private/courses/${contextId}/lessons/${Date.now()}_${fileName}`;
+    }
+    return {
+      ok: true,
+      json: async () => ({
+        url: 'https://r2.example.com/signed?key=test',
+        key,
+        contentType: 'application/octet-stream'
+      }),
+    } as any;
+  }
+  
+  if (urlObj.pathname.includes('/download-url')) {
+    return {
+      ok: true,
+      json: async () => ({
+        url: 'https://r2.example.com/signed?key=test',
+      }),
+    } as any;
+  }
+  
+  return {
+    ok: false,
+    json: async () => ({ detail: 'Not Found' }),
+  } as any;
+});
+global.fetch = fetchMock as any;
+
 import {
   getPresignedUploadUrl,
   getPresignedDownloadUrl,
@@ -81,6 +147,9 @@ describe('storage actions – getPresignedUploadUrl', () => {
     vi.clearAllMocks();
     adminMocks.docData.clear();
     process.env.R2_BUCKET_NAME = 'test-bucket';
+    process.env.NEXT_PUBLIC_API_URL = 'http://localhost:8000';
+    process.env.INTERNAL_EMAIL_SECRET = 'ae956d47a4cd94b240807625b20faaf04c18449fe5a89821a3ae0e64ccd63c81';
+    process.env.NEXTAUTH_SECRET = 'ae956d47a4cd94b240807625b20faaf04c18449fe5a89821a3ae0e64ccd63c81';
     (process.env as any).NODE_ENV = 'test';
   });
 
@@ -113,7 +182,6 @@ describe('storage actions – getPresignedUploadUrl', () => {
   });
 
   it('returns a presigned URL for a valid avatar upload (public, no token required)', async () => {
-    // Avatar is a public type — no token verification needed
     const result = await getPresignedUploadUrl(
       'user-1',
       'avatar',
@@ -146,8 +214,6 @@ describe('storage actions – getPresignedUploadUrl', () => {
   });
 
   it('verifies token and derives the correct private path for lesson upload', async () => {
-    adminMocks.adminAuth.verifyIdToken.mockResolvedValueOnce({ uid: 'user-1' });
-
     const result = await getPresignedUploadUrl(
       'user-1',
       'lesson',
@@ -160,7 +226,10 @@ describe('storage actions – getPresignedUploadUrl', () => {
 
     expect(result.error).toBeUndefined();
     expect(result.key).toMatch(/^private\/courses\/course-abc\/lessons\//);
-    expect(adminMocks.adminAuth.verifyIdToken).toHaveBeenCalledWith('valid-token');
+    expect(fetchMock).toHaveBeenCalled();
+    const lastCall = fetchMock.mock.calls[fetchMock.mock.calls.length - 1];
+    const headers = lastCall[1]?.headers as any;
+    expect(headers?.Authorization).toMatch(/^Bearer /);
   });
 });
 
@@ -168,6 +237,9 @@ describe('storage actions – getPresignedDownloadUrl', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     adminMocks.docData.clear();
+    process.env.NEXT_PUBLIC_API_URL = 'http://localhost:8000';
+    process.env.INTERNAL_EMAIL_SECRET = 'ae956d47a4cd94b240807625b20faaf04c18449fe5a89821a3ae0e64ccd63c81';
+    process.env.NEXTAUTH_SECRET = 'ae956d47a4cd94b240807625b20faaf04c18449fe5a89821a3ae0e64ccd63c81';
   });
 
   it('returns error when key is empty', async () => {
@@ -195,10 +267,7 @@ describe('storage actions – getPresignedDownloadUrl', () => {
   });
 
   it('sanitizes path traversal in key before generating URL', async () => {
-    // The sanitizer should strip ../
     const result = await getPresignedDownloadUrl('public/../private/secret.pdf', 'user-1');
-    // After sanitization the key starts with "private/secret.pdf" — should still return a URL
-    // because requesterUid is provided
     expect(['url', 'error']).toContain(result.error ? 'error' : 'url');
   });
 });

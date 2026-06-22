@@ -5,6 +5,31 @@
  * Redirects payment initialization and verification to the FastAPI Python backend.
  */
 
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '@/lib/auth-options';
+import jsonwebtoken from 'jsonwebtoken';
+
+async function getBackendToken(idToken?: string): Promise<string> {
+  const session = await getServerSession(authOptions);
+  let uid = '';
+  let role = 'student';
+  let email = '';
+  
+  if (session?.user) {
+    const u = session.user as any;
+    uid = u.id;
+    role = u.role || 'student';
+    email = u.email || '';
+  } else if (idToken && idToken !== 'nextauth-token-placeholder') {
+    uid = idToken;
+  }
+  
+  if (!uid) return '';
+  
+  const secret = process.env.INTERNAL_EMAIL_SECRET || process.env.NEXTAUTH_SECRET || '';
+  return jsonwebtoken.sign({ sub: uid, role, email }, secret, { expiresIn: '5m' });
+}
+
 export async function initializeTransaction(
   idToken: string,
   email: string,
@@ -14,11 +39,13 @@ export async function initializeTransaction(
   try {
     const apiUrl = `${process.env.NEXT_PUBLIC_API_URL}/payments/initialize`;
     
+    const backendToken = await getBackendToken(idToken);
+    
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${idToken || ''}`,
+        'Authorization': `Bearer ${backendToken}`,
       },
       body: JSON.stringify({ email, amount, metadata }),
     });
@@ -48,10 +75,12 @@ export async function verifyTransaction(
     
     const apiUrl = `${process.env.NEXT_PUBLIC_API_URL}/payments/verify?${queryParams.toString()}`;
     
+    const backendToken = await getBackendToken(idToken);
+    
     const response = await fetch(apiUrl, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${idToken || ''}`,
+        'Authorization': `Bearer ${backendToken}`,
       },
     });
     
