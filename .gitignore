@@ -18,6 +18,7 @@ ENV/
 backend/.venv/
 pip-log.txt
 pip-delete-this-directory.txt
+scratch/
 
 # Python caches and compiles
 **/__pycache__/
