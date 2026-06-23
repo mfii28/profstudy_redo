@@ -31,7 +31,7 @@ export async function getEnrolledCoursesAction(idToken: string): Promise<{ cours
       chunks.map(async (ids) => {
         const refs = ids.map((id) => adminDb.doc(`courses/${id}`));
         const snaps = await adminDb.getAll(...refs);
-        snaps.forEach((snap) => {
+        snaps.forEach((snap: any) => {
           if (snap.exists) {
             courseMap.set(snap.id, { ...(snap.data() as Omit<Course, 'id'>), id: snap.id });
           }

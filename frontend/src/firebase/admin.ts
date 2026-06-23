@@ -33,8 +33,32 @@ class CollectionQuery {
     return this;
   }
 
+  doc(id: string) {
+    return adminDb.doc(`${this.collectionName}/${id}`);
+  }
+
   select(...fields: string[]) {
     return this;
+  }
+
+  async add(payload: any) {
+    if (this.collectionName === 'bookPurchases') {
+      const created = await prisma.bookPurchase.create({
+        data: {
+          userId: payload.userId,
+          bookId: payload.bookId,
+          createdAt: payload.purchasedAt ? new Date(payload.purchasedAt) : new Date()
+        }
+      });
+      return {
+        id: created.id,
+        get: async () => ({
+          exists: true,
+          data: () => created
+        })
+      };
+    }
+    return { id: 'mock-id' };
   }
 
   async get() {
@@ -62,6 +86,9 @@ class CollectionQuery {
         where: { role: 'tutor' }
       });
       if (user) docs.push({ id: 'mock-affiliate', tutorId: user.id, status: 'active' });
+    } else if (this.collectionName === 'reviews') {
+      const reviews = await prisma.review.findMany({ take: this.limitCount });
+      docs = reviews;
     }
     
     return {
@@ -163,6 +190,9 @@ export const adminDb = {
   },
   collection: (name: string) => {
     return new CollectionQuery(name);
+  },
+  getAll: async (...refs: any[]) => {
+    return Promise.all(refs.map(ref => ref.get()));
   }
 } as any;
 

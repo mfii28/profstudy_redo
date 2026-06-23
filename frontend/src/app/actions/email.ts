@@ -4,7 +4,6 @@ import { Resend } from 'resend';
 import { getUsersForBulkEmail } from '@/lib/user-data';
 import { getGlobalSettings } from '@/lib/platform-settings-data';
 import { logger } from '@/lib/logging';
-import { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 import {
   buildWelcomeEmailHtml,
   buildEnrollmentConfirmationHtml,
@@ -174,7 +173,7 @@ export async function sendPlatformEmail({ to, subject, message, type, idToken, i
 
   try {
     if (to === 'all' || to === 'students' || to === 'tutors') {
-      let lastVisible: QueryDocumentSnapshot<DocumentData> | null = null;
+      let lastVisible: any = null;
       let hasMore = true;
       let processedRecipients = 0;
 

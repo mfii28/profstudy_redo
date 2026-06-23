@@ -58,12 +58,12 @@ export async function getAdminDashboardStats(idToken: string): Promise<AdminDash
       adminDb.collection('reviews').get(),
     ]);
 
-    const totalRevenue = ordersSnap.docs.reduce((sum, orderDoc) => {
+    const totalRevenue = ordersSnap.docs.reduce((sum: number, orderDoc: any) => {
       const data = orderDoc.data() as { total?: unknown };
       return sum + toNumber(data.total);
     }, 0);
 
-    const pendingApprovals = coursesSnap.docs.reduce((count, courseDoc) => {
+    const pendingApprovals = coursesSnap.docs.reduce((count: number, courseDoc: any) => {
       const status = String((courseDoc.data() as { status?: unknown }).status || '').trim().toLowerCase();
       return count + (status === 'under review' ? 1 : 0);
     }, 0);

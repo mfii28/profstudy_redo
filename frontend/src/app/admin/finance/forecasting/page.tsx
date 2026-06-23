@@ -47,7 +47,7 @@ export default function ForecastingPage() {
           const orders = await getOrders();
           
           const now = new Date();
-          const months = [];
+          const months: Date[] = [];
           for (let i = 5; i >= -3; i--) {
               months.push(startOfMonth(subMonths(now, i)));
           }

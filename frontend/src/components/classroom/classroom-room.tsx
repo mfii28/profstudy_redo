@@ -1187,9 +1187,9 @@ export function ClassroomRoom({ courseId, backHref, roomHref, initialChannel }: 
     
     try {
       const idToken = await user.getIdToken();
-      let attachmentUrl = undefined;
-      let attachmentName = undefined;
-      let attachmentType = undefined;
+      let attachmentUrl: string | undefined = undefined;
+      let attachmentName: string | undefined = undefined;
+      let attachmentType: string | undefined = undefined;
 
       if (file) {
         setIsUploading(true);

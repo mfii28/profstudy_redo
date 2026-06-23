@@ -201,44 +201,21 @@ export const updateUser = async (updatedUser: User): Promise<void> => {
         });
 }
 
+import { updateUserAddressAction, updateUserPreferencesAction, toggleWishlistAction } from '@/app/actions/user';
+
 export const updateUserAddress = async (userId: string, address: UserAddress): Promise<void> => {
-    if (!db) return;
-    const userRef = doc(db, 'users', userId);
-    await updateDoc(userRef, { address }).catch(async () => {
-        const permissionError = new FirestorePermissionError({
-            path: userRef.path,
-            operation: 'update',
-            requestResourceData: { address },
-        } satisfies SecurityRuleContext);
-        errorEmitter.emit('permission-error', permissionError);
-    });
+    const res = await updateUserAddressAction(address);
+    if (res.error) throw new Error(res.error);
 };
 
 export const updateUserPreferences = async (userId: string, preferences: UserPreferences): Promise<void> => {
-    if (!db) return;
-    const userRef = doc(db, 'users', userId);
-    await updateDoc(userRef, { preferences }).catch(async () => {
-        const permissionError = new FirestorePermissionError({
-            path: userRef.path,
-            operation: 'update',
-            requestResourceData: { preferences },
-        } satisfies SecurityRuleContext);
-        errorEmitter.emit('permission-error', permissionError);
-    });
+    const res = await updateUserPreferencesAction(preferences);
+    if (res.error) throw new Error(res.error);
 };
 
 export const toggleWishlist = async (userId: string, courseId: string, isAdded: boolean): Promise<void> => {
-    if (!db) return;
-    const userRef = doc(db, 'users', userId);
-    await updateDoc(userRef, {
-        wishlistCourseIds: isAdded ? arrayUnion(courseId) : arrayRemove(courseId)
-    }).catch(async () => {
-        const permissionError = new FirestorePermissionError({
-            path: userRef.path,
-            operation: 'update',
-        } satisfies SecurityRuleContext);
-        errorEmitter.emit('permission-error', permissionError);
-    });
+    const res = await toggleWishlistAction(courseId, isAdded);
+    if (res.error) throw new Error(res.error);
 };
 
 export const deductTokens = async (userId: string, amount: number): Promise<boolean> => {

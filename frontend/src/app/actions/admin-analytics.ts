@@ -104,38 +104,38 @@ export async function getAdminAnalyticsOverview(idToken: string): Promise<AdminA
     }
 
     const userDocs = usersSnap.docs;
-    const activeUsers = userDocs.filter((userDoc) => {
+    const activeUsers = userDocs.filter((userDoc: any) => {
       const status = String((userDoc.data() as { status?: unknown }).status || '').trim().toLowerCase();
       return status === 'active';
     }).length;
 
-    const totalStreak = userDocs.reduce((sum, userDoc) => {
+    const totalStreak = userDocs.reduce((sum: number, userDoc: any) => {
       const studyStreak = Number((userDoc.data() as { studyStreak?: unknown }).studyStreak || 0);
       return sum + (Number.isFinite(studyStreak) ? studyStreak : 0);
     }, 0);
     const avgStreak = userDocs.length > 0 ? totalStreak / userDocs.length : 0;
     const avgEngagement = `${Math.round(avgStreak * 5 + 35)} min`;
 
-    const engagedUsers = userDocs.filter((userDoc) => {
+    const engagedUsers = userDocs.filter((userDoc: any) => {
       const enrollments = (userDoc.data() as { enrollments?: unknown }).enrollments;
       return Array.isArray(enrollments) && enrollments.length > 0;
     }).length;
     const retentionRate = `${userDocs.length > 0 ? Math.round((engagedUsers / userDocs.length) * 100) : 0}%`;
 
-    const activeSubscriptions = subscriptionsSnap.docs.filter((subscriptionDoc) => {
+    const activeSubscriptions = subscriptionsSnap.docs.filter((subscriptionDoc: any) => {
       const status = String((subscriptionDoc.data() as { status?: unknown }).status || 'Active').trim().toLowerCase();
       return status === 'active';
     }).length;
 
     // Fallback: older deployments track active members in subscriptionPlans only.
-    const activeSubscribersFromPlans = subscriptionPlansSnap.docs.reduce((sum, planDoc) => {
+    const activeSubscribersFromPlans = subscriptionPlansSnap.docs.reduce((sum: number, planDoc: any) => {
       const activeSubscribers = Number((planDoc.data() as { activeSubscribers?: unknown }).activeSubscribers || 0);
       return sum + (Number.isFinite(activeSubscribers) ? activeSubscribers : 0);
     }, 0);
 
     const totalSubscriptions = activeSubscriptions > 0 ? activeSubscriptions : activeSubscribersFromPlans;
 
-    const recentReviews = reviewsSnap.docs.map((reviewDoc) => {
+    const recentReviews = reviewsSnap.docs.map((reviewDoc: any) => {
       const data = reviewDoc.data() as {
         course?: unknown;
         text?: unknown;
@@ -157,7 +157,7 @@ export async function getAdminAnalyticsOverview(idToken: string): Promise<AdminA
         rating: Number(data.rating || 0),
         date,
       };
-    }).sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime()).slice(0, 8);
+    }).sort((left: any, right: any) => new Date(right.date).getTime() - new Date(left.date).getTime()).slice(0, 8);
 
     return {
       activeUsers,

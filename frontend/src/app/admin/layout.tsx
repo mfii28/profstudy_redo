@@ -35,11 +35,10 @@ import { cn } from '@/lib/utils';
 import { AdminDashboardNav } from '@/components/dashboard/admin-dashboard-nav';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { NotificationDropdown } from '@/components/notification-dropdown';
-import { useUser, useFirestore } from '@/firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { useUser } from '@/firebase';
 import { getPresignedDownloadUrl, getPresignedUploadUrl } from '@/app/actions/storage';
 import { markAsRead, subscribeToNotifications } from '@/lib/notifications-data';
-import { syncAdminSessionClaims } from '@/app/actions/user';
+import { syncAdminSessionClaims, getUserProfileAction, updateUserProfileAction } from '@/app/actions/user';
 import { useToast } from '@/hooks/use-toast';
 import type { Notification } from '@/lib/db';
 
@@ -54,7 +53,6 @@ export default function AdminDashboardLayout({
   const router = useRouter();
   const pathname = usePathname();
   const { user: currentUser, isLoading, logout } = useUser();
-  const firestore = useFirestore();
   const { toast } = useToast();
   const [mounted, setMounted] = React.useState(false);
   const [adminProfile, setAdminProfile] = React.useState<any>(null);
@@ -72,16 +70,16 @@ export default function AdminDashboardLayout({
 
   React.useEffect(() => {
     const checkAdminStatus = async () => {
-      if (!isLoading && mounted && currentUser && firestore) {
+      if (!isLoading && mounted && currentUser) {
         if (pathname === '/admin/login') {
             setIsVerifying(false);
             return;
         }
 
         try {
-          const userDoc = await getDoc(doc(firestore, 'users', currentUser.uid));
-          if (userDoc.exists()) {
-            const profile = userDoc.data();
+          const res = await getUserProfileAction();
+          if (res.success && res.user) {
+            const profile = res.user;
             const role = String(profile.role || '').trim().toLowerCase();
             if (role === 'admin' || role === 'superadmin' || role === 'subadmin') {
               setAdminProfile(profile);
@@ -110,7 +108,7 @@ export default function AdminDashboardLayout({
           } else {
               router.replace('/login');
           }
-        } catch {
+        } catch (err) {
           const isOfflineError = !navigator.onLine;
           if (!isOfflineError) {
             // Non-offline verification error — redirect to login for safety
@@ -123,12 +121,10 @@ export default function AdminDashboardLayout({
             router.replace('/admin/login');
         }
         setIsVerifying(false);
-      } else if (!isLoading && mounted && currentUser && !firestore) {
-          setIsVerifying(false);
       }
     };
     checkAdminStatus();
-  }, [isLoading, currentUser, router, pathname, mounted, firestore]);
+  }, [isLoading, currentUser, router, pathname, mounted]);
 
   React.useEffect(() => {
     if (!currentUser || !mounted) return;
@@ -152,7 +148,7 @@ export default function AdminDashboardLayout({
 
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !currentUser || !firestore) return;
+    if (!file || !currentUser) return;
 
     if (!AVATAR_ALLOWED_TYPES.includes(file.type)) {
       toast({ variant: 'destructive', title: 'Invalid file type', description: 'Please upload a JPEG, PNG, or WebP image.' });
@@ -191,7 +187,11 @@ export default function AdminDashboardLayout({
         return;
       }
 
-      await updateDoc(doc(firestore, 'users', currentUser.uid), { avatar: key });
+      const updateRes = await updateUserProfileAction({ avatar: key });
+      if (updateRes.error) {
+        toast({ variant: 'destructive', title: 'Upload failed', description: updateRes.error });
+        return;
+      }
       setAdminProfile((prev: any) => ({ ...prev, avatar: key }));
 
       const objectUrl = URL.createObjectURL(file);

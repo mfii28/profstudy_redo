@@ -72,7 +72,7 @@ async function buildMembersFromUserIds(
     const chunk = uniqueIds.slice(i, i + 200);
     const refs = chunk.map((memberId) => adminDb.doc(`users/${memberId}`));
     const snaps = await adminDb.getAll(...refs);
-    snaps.forEach((snap) => {
+    snaps.forEach((snap: any) => {
       if (!snap.exists) return;
       const data = snap.data() as any;
       members.push({
@@ -325,8 +325,8 @@ export async function getClassroomsForUser(
       );
 
       const classroomMap = new Map<string, Classroom>();
-      snaps.forEach((snap) => {
-        snap.docs.forEach((doc) => {
+      snaps.forEach((snap: any) => {
+        snap.docs.forEach((doc: any) => {
           classroomMap.set(doc.id, { ...(doc.data() as Omit<Classroom, 'id'>), id: doc.id });
         });
       });
@@ -334,7 +334,7 @@ export async function getClassroomsForUser(
       return { classrooms: Array.from(classroomMap.values()) };
     }
 
-    const classrooms = classroomDocs.docs.map((doc) => ({
+    const classrooms = classroomDocs.docs.map((doc: any) => ({
       ...(doc.data() as Omit<Classroom, 'id'>),
       id: doc.id,
     }));
@@ -569,7 +569,7 @@ export async function getClassroomMembers(
       const refs = chunk.map((memberId) => adminDb.doc(`users/${memberId}`));
       const snaps = await adminDb.getAll(...refs);
 
-      snaps.forEach((docSnap) => {
+      snaps.forEach((docSnap: any) => {
         if (!docSnap.exists) return;
         const data = docSnap.data() as any;
         const memberMeta = memberMap.get(docSnap.id);
@@ -992,7 +992,7 @@ export async function addUsersToClassroom(
     let added = 0;
     for (const targetUid of uniqueIds) {
       const userRef = adminDb.doc(`users/${targetUid}`);
-      const wasAdded = await adminDb.runTransaction(async (tx) => {
+      const wasAdded = await adminDb.runTransaction(async (tx: any) => {
         const classroomTxSnap = await tx.get(classroomRef);
         if (!classroomTxSnap.exists) return false;
         const classroomTx = classroomTxSnap.data() as any;
@@ -1151,7 +1151,7 @@ export async function removeUserFromClassroom(
     }
 
     const userRef = adminDb.doc(`users/${userId}`);
-    await adminDb.runTransaction(async (tx) => {
+    await adminDb.runTransaction(async (tx: any) => {
       const classroomTxSnap = await tx.get(classroomRef);
       if (!classroomTxSnap.exists) return;
       const classroomTx = classroomTxSnap.data() as any;
@@ -1288,7 +1288,7 @@ export async function reactToClassroomMessage(
     if (!hasAccess) return { error: 'Access denied.' };
 
     const msgRef = adminDb.doc(`classroomMessages/${messageId}`);
-    await adminDb.runTransaction(async (tx) => {
+    await adminDb.runTransaction(async (tx: any) => {
       const msgSnap = await tx.get(msgRef);
       if (!msgSnap.exists) throw new Error('Message not found.');
       const msgData = msgSnap.data() as any;
@@ -1359,7 +1359,7 @@ export async function getOlderClassroomMessages(
 
     // Returned in descending order — reverse so oldest-first for display prepending.
     const messages: ClassroomMessage[] = snap.docs
-      .map((doc) => ({ ...(doc.data() as Omit<ClassroomMessage, 'id'>), id: doc.id }))
+      .map((doc: any) => ({ ...(doc.data() as Omit<ClassroomMessage, 'id'>), id: doc.id }))
       .reverse();
 
     return { messages };
@@ -1523,7 +1523,7 @@ export async function getThreadMessages(
       .orderBy('timestamp', 'asc')
       .get();
 
-    const messages = snap.docs.map((doc) => ({
+    const messages = snap.docs.map((doc: any) => ({
       ...(doc.data() as any),
       id: doc.id,
     }));

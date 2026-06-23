@@ -1,7 +1,7 @@
 'use client';
 
-import React, { createContext, useContext, ReactNode, useMemo } from 'react';
-import { useSession, signOut } from 'next-auth/react';
+import React, { createContext, useContext, ReactNode, useMemo, useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase-client';
 
 // Interfaces to mimic Firebase Auth structures
 export interface MockUser {
@@ -40,38 +40,78 @@ export interface UserHookResult {
 
 export const FirebaseContext = createContext<FirebaseContextState | undefined>(undefined);
 
-export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const { data: session, status } = useSession();
-
-  const isUserLoading = status === 'loading';
-
-  const user = useMemo((): MockUser | null => {
-    if (!session?.user) return null;
-    const u = session.user as any;
-    return {
-      uid: u.id || '',
-      id: u.id || '',
-      email: u.email || '',
-      name: u.name || '',
-      displayName: u.name || '',
-      image: u.image || '',
-      photoURL: u.image || '',
-      role: u.role || 'student',
-      emailVerified: true,
-      getIdToken: async () => u.id || '',
-      getIdTokenResult: async () => ({
+function mapSupabaseUser(supabaseUser: any): MockUser {
+  const role = supabaseUser.user_metadata?.role || 'student';
+  const name = supabaseUser.user_metadata?.name || supabaseUser.user_metadata?.full_name || '';
+  return {
+    uid: supabaseUser.id,
+    id: supabaseUser.id,
+    email: supabaseUser.email || '',
+    name: name,
+    displayName: name,
+    image: supabaseUser.user_metadata?.avatar_url || '',
+    photoURL: supabaseUser.user_metadata?.avatar_url || '',
+    role: role,
+    emailVerified: !!supabaseUser.email_confirmed_at,
+    getIdToken: async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      return session?.access_token || '';
+    },
+    getIdTokenResult: async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      return {
+        token: session?.access_token || '',
         claims: {
-          emailVerified: true,
-          role: u.role || 'student',
+          emailVerified: !!supabaseUser.email_confirmed_at,
+          role: role,
         },
-      }),
-    };
-  }, [session]);
+      };
+    },
+  };
+}
+
+export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const [user, setUser] = useState<MockUser | null>(null);
+  const [isUserLoading, setIsUserLoading] = useState(true);
 
   const logout = React.useCallback(async () => {
-    // Clear session cookies and signOut
     document.cookie = '__session=; path=/; max-age=0;';
-    await signOut({ callbackUrl: '/login' });
+    await supabase.auth.signOut();
+    setUser(null);
+    window.location.href = '/login';
+  }, []);
+
+  useEffect(() => {
+    // 1. Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setUser(mapSupabaseUser(session.user));
+      } else {
+        setUser(null);
+      }
+      setIsUserLoading(false);
+    });
+
+    // 2. Listen to auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        // Set cookie so backend can check it if needed
+        const secure = window.location.protocol === 'https:' ? 'Secure;' : '';
+        const role = session.user.user_metadata?.role || 'student';
+        const emailVerified = !!session.user.email_confirmed_at;
+        const mockSessionToken = btoa(JSON.stringify({ uid: session.user.id, role: role, emailVerified }));
+        document.cookie = `__session=${mockSessionToken}; path=/; max-age=3600; SameSite=Lax; ${secure}`;
+        setUser(mapSupabaseUser(session.user));
+      } else {
+        document.cookie = '__session=; path=/; max-age=0;';
+        setUser(null);
+      }
+      setIsUserLoading(false);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const contextValue = useMemo((): FirebaseContextState => {

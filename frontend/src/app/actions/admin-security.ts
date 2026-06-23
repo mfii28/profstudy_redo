@@ -37,11 +37,11 @@ export async function getAdminSecurityTelemetry(idToken: string): Promise<AdminS
       adminDb.collection('ip_blocklist').limit(100).get(),
     ]);
 
-    const users = usersSnap.docs.map((userDoc) => userDoc.data() as User);
-    const allOrders = ordersSnap.docs.map((orderDoc) => ({ id: orderDoc.id, ...orderDoc.data() } as Order));
-    const failedOrders = allOrders.filter((order) => order.status === 'Cancelled').slice(0, 5);
-    const blocklist = sortByTimestampDesc(
-      blocklistSnap.docs.map((blockDoc) => ({ id: blockDoc.id, ...blockDoc.data() } as IpBlock))
+    const users = usersSnap.docs.map((userDoc: any) => userDoc.data() as User);
+    const allOrders = ordersSnap.docs.map((orderDoc: any) => ({ id: orderDoc.id, ...orderDoc.data() } as Order));
+    const failedOrders = allOrders.filter((order: any) => order.status === 'Cancelled').slice(0, 5);
+    const blocklist = sortByTimestampDesc<IpBlock>(
+      blocklistSnap.docs.map((blockDoc: any) => ({ id: blockDoc.id, ...blockDoc.data() } as IpBlock))
     ).slice(0, 100);
 
     return { users, failedOrders, blocklist };

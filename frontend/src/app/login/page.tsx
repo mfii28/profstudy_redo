@@ -16,7 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Logo } from '@/components/logo';
 import { useToast } from '@/hooks/use-toast';
-import { signIn, getSession } from 'next-auth/react';
+import { supabase } from '@/lib/supabase-client';
 import { Loader2, Eye, EyeOff } from 'lucide-react';
 import { getRoleDashboardPath } from '@/lib/auth-verification';
 
@@ -36,28 +36,31 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      const res = await signIn('credentials', {
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: email.toLowerCase().trim(),
         password,
-        redirect: false,
       });
 
-      if (res?.error) {
+      if (error) {
         toast({
           variant: 'destructive',
           title: 'Login Failed',
-          description: 'Invalid email or password.',
+          description: error.message || 'Invalid email or password.',
         });
         setIsLoading(false);
         return;
       }
 
-      // Fetch the updated session to get the user's role
-      const session = await getSession();
-      const role = (session?.user as any)?.role || 'student';
+      const user = data.user;
+      if (!user) throw new Error('No user data returned.');
+
+      const role = user.user_metadata?.role || 'student';
 
       // Set cookie for compatibility
-      document.cookie = `__session=${tokenPlaceholder(session)}; path=/; max-age=3600; SameSite=Lax`;
+      const secure = window.location.protocol === 'https:' ? 'Secure;' : '';
+      const emailVerified = !!user.email_confirmed_at;
+      const mockSessionToken = btoa(JSON.stringify({ uid: user.id, role, emailVerified }));
+      document.cookie = `__session=${mockSessionToken}; path=/; max-age=3600; SameSite=Lax; ${secure}`;
 
       toast({
         title: 'Login Successful',
@@ -77,7 +80,13 @@ export default function LoginPage() {
   const handleGoogleLogin = async () => {
     setIsLoading(true);
     try {
-      await signIn('google', { callbackUrl: '/dashboard' });
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/dashboard`,
+        },
+      });
+      if (error) throw error;
     } catch (error: any) {
       toast({ variant: 'destructive', title: 'Google Login Failed', description: error.message });
       setIsLoading(false);
@@ -88,23 +97,27 @@ export default function LoginPage() {
     if (!resetEmail) {
       toast({
         variant: 'destructive',
-        title: 'Please enter your email address.',
+        title: 'Error',
+        description: 'Please enter your email address.',
       });
       return;
     }
     setIsResetting(true);
     try {
-      // Stub password reset in MongoDB/NextAuth context
+      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail.toLowerCase().trim(), {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (error) throw error;
       toast({
-        title: 'Password Reset Email Sent',
-        description: 'Please check your inbox to reset your password.',
+        title: 'Success',
+        description: 'Password reset link has been sent to your email.',
       });
       setIsResetDialogOpen(false);
     } catch (error: any) {
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: 'Could not send reset email. Please try again.',
+        description: error.message || 'Could not send reset email. Please try again.',
       });
     } finally {
       setIsResetting(false);

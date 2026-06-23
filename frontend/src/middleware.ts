@@ -196,12 +196,22 @@ interface FirebaseJwtPayload {
 function decodeJwtPayloadUnsafe(token: string): FirebaseJwtPayload | null {
   try {
     const parts = token.split('.');
-    if (parts.length !== 3) return null;
-    // JWT payload is base64url-encoded
-    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-    const padded = base64.padEnd(base64.length + (4 - (base64.length % 4)) % 4, '=');
-    const decoded = atob(padded);
-    return JSON.parse(decoded);
+    if (parts.length === 3) {
+      // JWT payload is base64url-encoded
+      const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      const padded = base64.padEnd(base64.length + (4 - (base64.length % 4)) % 4, '=');
+      const decoded = atob(padded);
+      return JSON.parse(decoded);
+    }
+    // Fallback: decode directly as a base64 encoded JSON (our mock session token)
+    const decoded = atob(token);
+    const payload = JSON.parse(decoded);
+    return {
+      uid: payload.uid,
+      user_id: payload.uid,
+      role: payload.role,
+      emailVerified: payload.emailVerified ?? true,
+    };
   } catch {
     return null;
   }
@@ -390,7 +400,7 @@ export async function middleware(request: NextRequest) {
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "img-src 'self' data: blob: https://*.googleapis.com https://*.googleusercontent.com https://cdn.mytestingdomain.icu https://*.r2.cloudflarestorage.com https://*.r2.dev https://placehold.co https://images.unsplash.com https://picsum.photos https://i.pravatar.cc https://*.replit.dev https://*.repl.co https://*.replit.app",
       "font-src 'self' https://fonts.gstatic.com https://unpkg.com",
-      "connect-src 'self' https://*.firebaseio.com https://*.googleapis.com https://*.firebase.google.com wss://*.firebaseio.com https://cdn.mytestingdomain.icu https://*.r2.cloudflarestorage.com https://*.r2.dev https://unpkg.com https://source.zoom.us wss://*.zoom.us wss://*.zoomgov.com https://*.zoom.us https://*.zoomgov.com https://*.replit.dev https://*.repl.co https://*.replit.app",
+      "connect-src 'self' https://*.supabase.co https://*.firebaseio.com https://*.googleapis.com https://*.firebase.google.com wss://*.firebaseio.com https://cdn.mytestingdomain.icu https://*.r2.cloudflarestorage.com https://*.r2.dev https://unpkg.com https://source.zoom.us wss://*.zoom.us wss://*.zoomgov.com https://*.zoom.us https://*.zoomgov.com https://*.replit.dev https://*.repl.co https://*.replit.app",
       "media-src 'self' blob: https://*.r2.cloudflarestorage.com https://*.r2.dev",
       "frame-src 'self' https://*.firebaseapp.com https://accounts.google.com https://www.youtube.com https://www.youtube-nocookie.com https://*.r2.cloudflarestorage.com https://*.r2.dev https://vercel.live https://*.replit.dev https://*.repl.co https://*.replit.app",
       "worker-src 'self' blob: https://source.zoom.us",

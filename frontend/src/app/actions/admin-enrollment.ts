@@ -60,7 +60,7 @@ export async function searchUsersForManualEnrollment(idToken: string, queryText:
     if (!q) {
       const snapshot = await usersRef.where('role', '==', 'student').limit(limitSize).get();
       const users = snapshot.docs
-        .map((snap) => {
+        .map((snap: any) => {
           const data = snap.data() as any;
           return {
             id: snap.id,
@@ -69,8 +69,8 @@ export async function searchUsersForManualEnrollment(idToken: string, queryText:
             role: String(data?.role || '').trim().toLowerCase(),
           };
         })
-        .filter((user) => user.email)
-        .map(({ id, name, email }) => ({ id, name, email }));
+        .filter((user: any) => user.email)
+        .map(({ id, name, email }: any) => ({ id, name, email }));
 
       return { users };
     }
@@ -162,7 +162,7 @@ export async function bulkEnrollUsersInCourseByAdmin(idToken: string, userIds: s
       }
     }
 
-    const successCount = results.filter((r) => r.success).length;
+    const successCount = results.filter((r: any) => r.success).length;
     return {
       success: true,
       successCount,

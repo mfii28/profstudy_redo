@@ -30,11 +30,11 @@ import { cn } from '@/lib/utils';
 import { TutorDashboardNav } from '@/components/dashboard/tutor-dashboard-nav';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { NotificationDropdown } from '@/components/notification-dropdown';
-import { useUser, useFirestore } from '@/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { useUser } from '@/firebase';
 import { getPresignedDownloadUrl } from '@/app/actions/storage';
 import { getNotifications, markAsRead, subscribeToNotifications } from '@/lib/notifications-data';
 import type { Notification } from '@/lib/db';
+import { getUserProfileAction } from '@/app/actions/user';
 
 export default function TutorDashboardLayout({
   children,
@@ -46,7 +46,6 @@ export default function TutorDashboardLayout({
   const isLearnPage = pathname.startsWith('/tutor-dashboard/learn');
   const isClassroomRoom = pathname.startsWith('/tutor-dashboard/classroom/');
   const { user: currentUser, isLoading, logout } = useUser();
-  const firestore = useFirestore();
   const [mounted, setMounted] = React.useState(false);
   const [tutorProfile, setTutorProfile] = React.useState<any>(null);
   const [isVerifying, setIsVerifying] = React.useState(true);
@@ -69,13 +68,13 @@ export default function TutorDashboardLayout({
     let cancelled = false;
 
     const fetchTutorProfile = async () => {
-      if (!isLoading && currentUser && mounted && firestore) {
+      if (!isLoading && currentUser && mounted) {
         setVerifyError(null);
         try {
-          const userDoc = await getDoc(doc(firestore, 'users', currentUser.uid));
+          const res = await getUserProfileAction();
           if (cancelled) return;
-          if (userDoc.exists()) {
-            const profile = userDoc.data();
+          if (res.success && res.user) {
+            const profile = res.user;
             if (profile.role === 'tutor') {
               setTutorProfile(profile);
               
@@ -107,12 +106,10 @@ export default function TutorDashboardLayout({
       } else if (!isLoading && !currentUser && mounted) {
         router.replace('/login');
         setIsVerifying(false);
-      } else if (!isLoading && currentUser && mounted && !firestore) {
-          setIsVerifying(false);
       }
     };
     fetchTutorProfile();
-  }, [isLoading, currentUser, router, mounted, firestore]);
+  }, [isLoading, currentUser, router, mounted]);
 
   // REAL-TIME NOTIFICATIONS
   React.useEffect(() => {

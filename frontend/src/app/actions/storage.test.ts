@@ -83,9 +83,13 @@ vi.mock('@/lib/server-request', () => ({
   validateTrustedServerContext: vi.fn(async () => 'localhost'),
 }));
 
-// Mock NextAuth to avoid request scope errors
-vi.mock('next-auth/next', () => ({
-  getServerSession: vi.fn(async () => null),
+// Mock Supabase server client to avoid request scope errors
+vi.mock('@/lib/supabase-server', () => ({
+  createClient: vi.fn(async () => ({
+    auth: {
+      getUser: vi.fn(async () => ({ data: { user: null } })),
+    },
+  })),
 }));
 
 vi.mock('@/lib/prisma', () => ({

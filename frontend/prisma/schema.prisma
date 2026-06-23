@@ -1,6 +1,7 @@
 datasource db {
-  provider = "mongodb"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 generator client {
@@ -8,7 +9,7 @@ generator client {
 }
 
 model User {
-  id                           String              @id @map("_id") // Matches Firebase Auth UID or NextAuth provider ID
+  id                           String              @id // Matches Supabase Auth User ID
   email                        String              @unique
   name                         String?
   avatar                       String?
@@ -39,7 +40,7 @@ model User {
   createdAt                    DateTime            @default(now())
   updatedAt                    DateTime            @updatedAt
 
-  // NextAuth relations
+  // NextAuth relations (keeping for schema compatibility)
   accounts           Account[]
   sessions           Session[]
 
@@ -63,7 +64,7 @@ model User {
 }
 
 model Account {
-  id                String  @id @default(cuid()) @map("_id")
+  id                String  @id @default(cuid())
   userId            String
   type              String
   provider          String
@@ -82,7 +83,7 @@ model Account {
 }
 
 model Session {
-  id           String   @id @default(cuid()) @map("_id")
+  id           String   @id @default(cuid())
   sessionToken String   @unique
   userId       String
   expires      DateTime
@@ -90,7 +91,7 @@ model Session {
 }
 
 model VerificationToken {
-  id         String   @id @default(cuid()) @map("_id")
+  id         String   @id @default(cuid())
   identifier String
   token      String   @unique
   expires    DateTime
@@ -99,7 +100,7 @@ model VerificationToken {
 }
 
 model TutorDetail {
-  id                 String              @id @default(cuid()) @map("_id")
+  id                 String              @id @default(cuid())
   userId             String              @unique
   user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   totalStudents      Int                 @default(0)
@@ -116,7 +117,7 @@ model TutorDetail {
 }
 
 model CartItem {
-  id        String   @id @default(cuid()) @map("_id")
+  id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   courseId  String?
@@ -125,7 +126,7 @@ model CartItem {
 }
 
 model ActiveSession {
-  id        String   @id @default(cuid()) @map("_id")
+  id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   token     String   @unique
@@ -134,7 +135,7 @@ model ActiveSession {
 }
 
 model Course {
-  id          String         @id @default(cuid()) @map("_id")
+  id          String         @id @default(cuid())
   title       String
   description String?
   price       Float?
@@ -150,14 +151,14 @@ model Course {
 }
 
 model CourseCategory {
-  id        String   @id @default(cuid()) @map("_id")
+  id        String   @id @default(cuid())
   name      String   @unique
   courses   Course[]
   createdAt DateTime @default(now())
 }
 
 model Order {
-  id        String   @id @default(cuid()) @map("_id")
+  id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   amount    Float
@@ -168,7 +169,7 @@ model Order {
 }
 
 model LiveClass {
-  id           String   @id @default(cuid()) @map("_id")
+  id           String   @id @default(cuid())
   title        String
   instructorId String
   startTime    DateTime
@@ -179,7 +180,7 @@ model LiveClass {
 }
 
 model Book {
-  id        String         @id @default(cuid()) @map("_id")
+  id        String         @id @default(cuid())
   title     String
   price     Float
   status    String         @default("Draft") // Draft, Published
@@ -189,7 +190,7 @@ model Book {
 }
 
 model BookPurchase {
-  id        String   @id @default(cuid()) @map("_id")
+  id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   bookId    String
@@ -198,7 +199,7 @@ model BookPurchase {
 }
 
 model Assignment {
-  id        String   @id @default(cuid()) @map("_id")
+  id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   title     String
@@ -209,7 +210,7 @@ model Assignment {
 }
 
 model Note {
-  id        String   @id @default(cuid()) @map("_id")
+  id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   title     String
@@ -219,7 +220,7 @@ model Note {
 }
 
 model Review {
-  id        String   @id @default(cuid()) @map("_id")
+  id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   courseId  String
@@ -229,7 +230,7 @@ model Review {
 }
 
 model DiscussionThread {
-  id        String              @id @default(cuid()) @map("_id")
+  id        String              @id @default(cuid())
   title     String
   content   String
   authorId  String
@@ -240,25 +241,25 @@ model DiscussionThread {
 }
 
 model DiscussionMessage {
-  id        String           @id @default(cuid()) @map("_id")
+  id        String           @id @default(cuid())
   threadId  String
   thread    DiscussionThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
   authorId  String
   author    User             @relation(fields: [authorId], references: [id], onDelete: Cascade)
   content   String
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
 }
 
 model Conversation {
-  id             String    @id @default(cuid()) @map("_id")
-  participantIds String[]  // Array of 2 UIDs
+  id             String    @id @default(cuid())
+  participantIds String[]  // Maps to array in postgres (text[])
   messages       Message[]
   createdAt      DateTime  @default(now())
 }
 
 model Message {
-  id             String       @id @default(cuid()) @map("_id")
+  id             String       @id @default(cuid())
   conversationId String
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   senderId       String
@@ -268,17 +269,17 @@ model Message {
 }
 
 model Classroom {
-  id                 String              @id @default(cuid()) @map("_id")
+  id                 String              @id @default(cuid())
   name               String
   tutorId            String
-  enrolledStudentIds String[]            // Array of student UIDs
+  enrolledStudentIds String[]            // Maps to array in postgres (text[])
   messages           ClassroomMessage[]
   presence           ClassroomPresence[]
   createdAt          DateTime            @default(now())
 }
 
 model ClassroomMessage {
-  id          String    @id @default(cuid()) @map("_id")
+  id          String    @id @default(cuid())
   classroomId String
   classroom   Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
   userId      String
@@ -288,7 +289,7 @@ model ClassroomMessage {
 }
 
 model ClassroomPresence {
-  id          String    @id @default(cuid()) @map("_id")
+  id          String    @id @default(cuid())
   classroomId String
   classroom   Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
   userId      String
@@ -297,7 +298,7 @@ model ClassroomPresence {
 }
 
 model PayoutRequest {
-  id         String      @id @default(cuid()) @map("_id")
+  id         String      @id @default(cuid())
   tutorId    String
   tutor      TutorDetail @relation(fields: [tutorId], references: [id], onDelete: Cascade)
   amount     Float
@@ -309,7 +310,7 @@ model PayoutRequest {
 }
 
 model Achievement {
-  id        String   @id @default(cuid()) @map("_id")
+  id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   title     String
@@ -318,7 +319,7 @@ model Achievement {
 }
 
 model SupportTicket {
-  id          String   @id @default(cuid()) @map("_id")
+  id          String   @id @default(cuid())
   userId      String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   title       String
@@ -329,7 +330,7 @@ model SupportTicket {
 }
 
 model Notification {
-  id        String   @id @default(cuid()) @map("_id")
+  id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   title     String
@@ -339,7 +340,7 @@ model Notification {
 }
 
 model CourseRagSource {
-  id          String   @id @default(cuid()) @map("_id")
+  id          String   @id @default(cuid())
   courseId    String
   course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
   sourceFile  String
@@ -352,7 +353,7 @@ model CourseRagSource {
 }
 
 model PlatformSettings {
-  id        String   @id @map("_id")
+  id        String   @id
   settings  Json
   updatedAt DateTime @updatedAt
 

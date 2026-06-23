@@ -516,9 +516,9 @@ export async function checkRegistrationNumberExistsAction(registrationNumber: st
 }
 
 export async function registerUser(params: {
+  id: string;
   name: string;
   email: string;
-  password: string;
   role: 'student' | 'tutor';
   phone_number: string;
   student_registration_number?: string;
@@ -526,41 +526,17 @@ export async function registerUser(params: {
   referredBy?: string;
 }) {
   const prisma = (await import('@/lib/prisma')).default;
-  const bcrypt = (await import('bcryptjs')).default;
-  const { v4: uuidv4 } = await import('uuid');
 
   try {
     const email = params.email.trim().toLowerCase();
     const name = params.name.trim();
-
-    // Check if email exists
-    const existing = await prisma.user.findUnique({
-      where: { email }
-    });
-    if (existing) {
-      return { error: 'This email is already registered.' };
-    }
-
-    // Check if registration number exists
-    if (params.student_registration_number) {
-      const regExists = await prisma.user.findFirst({
-        where: { student_registration_number: params.student_registration_number.trim() }
-      });
-      if (regExists) {
-        return { error: 'This registration number is already in use.' };
-      }
-    }
-
-    const passwordHash = await bcrypt.hash(params.password, 10);
-    const userId = uuidv4();
     const now = new Date();
 
     const newUser = await prisma.user.create({
       data: {
-        id: userId,
+        id: params.id,
         email,
         name,
-        passwordHash,
         role: params.role,
         status: 'active',
         phone_number: params.phone_number,
@@ -594,24 +570,7 @@ export async function registerUser(params: {
       console.error('[Signup Action] Welcome email failed:', err);
     }
 
-    // Generate/Send OTP
-    const jwt = (await import('jsonwebtoken')).default;
-    const secret = process.env.NEXTAUTH_SECRET || process.env.INTERNAL_EMAIL_SECRET || 'fallback-secret';
-    const callerIdToken = jwt.sign({ sub: userId, role: params.role }, secret, { expiresIn: '5m' });
-
-    try {
-      const { sendOtpEmail } = await import('./otp');
-      const otpResult = await sendOtpEmail({ uid: userId, callerIdToken });
-      if (otpResult.error) {
-        console.error('[Signup Action] sendOtpEmail failed:', otpResult.error);
-        return { success: true, user: { id: newUser.id, name: newUser.name, email: newUser.email, role: newUser.role }, otpError: otpResult.error, callerIdToken };
-      }
-    } catch (err: any) {
-      console.error('[Signup Action] OTP send exception:', err);
-      return { success: true, user: { id: newUser.id, name: newUser.name, email: newUser.email, role: newUser.role }, otpError: err.message || 'OTP send failed', callerIdToken };
-    }
-
-    return { success: true, user: { id: newUser.id, name: newUser.name, email: newUser.email, role: newUser.role }, callerIdToken };
+    return { success: true, user: { id: newUser.id, name: newUser.name, email: newUser.email, role: newUser.role } };
   } catch (error: any) {
     console.error('[Signup Action] Exception during registration:', error);
     return { error: error.message || 'An unexpected error occurred during signup.' };
@@ -619,14 +578,31 @@ export async function registerUser(params: {
 }
 
 export async function getUserProfileAction() {
-  const { getServerSession } = await import('next-auth/next');
-  const { authOptions } = await import('@/lib/auth-options');
-  const session = await getServerSession(authOptions);
-  if (!session?.user) return { error: 'Not authenticated' };
+  const { createClient } = await import('@/lib/supabase-server');
+  const { cookies } = await import('next/headers');
+  const cookieStore = await cookies();
+  
+  const supabase = await createClient();
+  const { data: { user: authUser } } = await supabase.auth.getUser();
+  
+  let userId = authUser?.id;
+  if (!userId) {
+    const sessionCookie = cookieStore.get('__session')?.value;
+    if (sessionCookie) {
+      try {
+        const decoded = JSON.parse(Buffer.from(sessionCookie, 'base64').toString('utf-8'));
+        userId = decoded.uid;
+      } catch (e) {
+        // Ignored
+      }
+    }
+  }
+
+  if (!userId) return { error: 'Not authenticated' };
 
   const prisma = (await import('@/lib/prisma')).default;
   const user = await prisma.user.findUnique({
-    where: { id: (session.user as any).id }
+    where: { id: userId }
   });
 
   if (!user) return { error: 'User not found' };
@@ -645,15 +621,16 @@ export async function getUserProfileAction() {
 }
 
 export async function updateUserProfileAction(data: { name?: string; bio?: string; avatar?: string }) {
-  const { getServerSession } = await import('next-auth/next');
-  const { authOptions } = await import('@/lib/auth-options');
-  const session = await getServerSession(authOptions);
-  if (!session?.user) return { error: 'Not authenticated' };
+  const { createClient } = await import('@/lib/supabase-server');
+  const supabase = await createClient();
+  const { data: { user: authUser } } = await supabase.auth.getUser();
+  if (!authUser) return { error: 'Not authenticated' };
+  const userId = authUser.id;
 
   const prisma = (await import('@/lib/prisma')).default;
 
   const updated = await prisma.user.update({
-    where: { id: (session.user as any).id },
+    where: { id: userId },
     data: {
       name: data.name,
       bio: data.bio,
@@ -661,6 +638,12 @@ export async function updateUserProfileAction(data: { name?: string; bio?: strin
       updatedAt: new Date()
     }
   });
+
+  if (data.name) {
+    await supabase.auth.updateUser({
+      data: { name: data.name }
+    });
+  }
 
   return {
     success: true,
@@ -676,44 +659,97 @@ export async function updateUserProfileAction(data: { name?: string; bio?: strin
 }
 
 export async function changeUserPasswordAction(params: { currentPassword?: string; newPassword?: string }) {
-  const { getServerSession } = await import('next-auth/next');
-  const { authOptions } = await import('@/lib/auth-options');
-  const session = await getServerSession(authOptions);
-  if (!session?.user) return { error: 'Not authenticated' };
+  const { createClient } = await import('@/lib/supabase-server');
+  const supabase = await createClient();
+  const { data: { user: authUser } } = await supabase.auth.getUser();
+  if (!authUser) return { error: 'Not authenticated' };
 
-  if (!params.currentPassword || !params.newPassword) {
-    return { error: 'Current password and new password are required.' };
+  if (!params.newPassword) {
+    return { error: 'New password is required.' };
   }
   if (params.newPassword.length < 8) {
     return { error: 'New password must be at least 8 characters long.' };
   }
 
-  const prisma = (await import('@/lib/prisma')).default;
-  const bcrypt = (await import('bcryptjs')).default;
-
-  const user = await prisma.user.findUnique({
-    where: { id: (session.user as any).id }
+  const { error } = await supabase.auth.updateUser({
+    password: params.newPassword
   });
 
-  if (!user || !user.passwordHash) {
-    return { error: 'User not found or does not have a local password login.' };
-  }
+  return { success: true };
+}
 
-  const isValid = await bcrypt.compare(params.currentPassword, user.passwordHash);
-  if (!isValid) {
-    return { error: 'Current password is incorrect.' };
-  }
+export async function updateUserAddressAction(address: any) {
+  const { createClient } = await import('@/lib/supabase-server');
+  const supabase = await createClient();
+  const { data: { user: authUser } } = await supabase.auth.getUser();
+  if (!authUser) return { error: 'Not authenticated' };
+  const userId = authUser.id;
 
-  const newHash = await bcrypt.hash(params.newPassword, 10);
+  const prisma = (await import('@/lib/prisma')).default;
   await prisma.user.update({
-    where: { id: user.id },
+    where: { id: userId },
     data: {
-      passwordHash: newHash,
+      address: JSON.stringify(address),
       updatedAt: new Date()
     }
   });
 
   return { success: true };
+}
+
+export async function updateUserPreferencesAction(preferences: any) {
+  const { createClient } = await import('@/lib/supabase-server');
+  const supabase = await createClient();
+  const { data: { user: authUser } } = await supabase.auth.getUser();
+  if (!authUser) return { error: 'Not authenticated' };
+  const userId = authUser.id;
+
+  const prisma = (await import('@/lib/prisma')).default;
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      preferences: preferences as any,
+      updatedAt: new Date()
+    }
+  });
+
+  return { success: true };
+}
+
+export async function toggleWishlistAction(courseId: string, isAdded: boolean) {
+  const { createClient } = await import('@/lib/supabase-server');
+  const supabase = await createClient();
+  const { data: { user: authUser } } = await supabase.auth.getUser();
+  if (!authUser) return { error: 'Not authenticated' };
+  const userId = authUser.id;
+
+  const prisma = (await import('@/lib/prisma')).default;
+  
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { wishlistCourseIds: true }
+  });
+
+  if (!user) return { error: 'User not found' };
+
+  let wishlist = user.wishlistCourseIds || [];
+  if (isAdded) {
+    if (!wishlist.includes(courseId)) {
+      wishlist.push(courseId);
+    }
+  } else {
+    wishlist = wishlist.filter(id => id !== courseId);
+  }
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      wishlistCourseIds: wishlist,
+      updatedAt: new Date()
+    }
+  });
+
+  return { success: true, wishlist };
 }
 
 

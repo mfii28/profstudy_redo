@@ -5,21 +5,20 @@
  * Redirects payment initialization and verification to the FastAPI Python backend.
  */
 
-import { getServerSession } from 'next-auth/next';
-import { authOptions } from '@/lib/auth-options';
+import { createClient } from '@/lib/supabase-server';
 import jsonwebtoken from 'jsonwebtoken';
 
 async function getBackendToken(idToken?: string): Promise<string> {
-  const session = await getServerSession(authOptions);
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
   let uid = '';
   let role = 'student';
   let email = '';
   
-  if (session?.user) {
-    const u = session.user as any;
-    uid = u.id;
-    role = u.role || 'student';
-    email = u.email || '';
+  if (user) {
+    uid = user.id;
+    role = user.user_metadata?.role || 'student';
+    email = user.email || '';
   } else if (idToken && idToken !== 'nextauth-token-placeholder') {
     uid = idToken;
   }

@@ -2,69 +2,73 @@
 
 import { useEffect, useState } from 'react';
 import type { User as AppUser } from '@/lib/db';
-import { useUser, useFirestore } from '@/firebase';
+import { useUser } from '@/firebase';
 import { buildDefaultUserProfile } from '@/lib/user-data';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { bootstrapUserProfile } from '@/app/actions/user';
+import { getUserProfileAction, bootstrapUserProfile } from '@/app/actions/user';
 
 export function useStudentProfile() {
   const { user, isLoading: isAuthLoading } = useUser();
-  const firestore = useFirestore();
   const [profile, setProfile] = useState<AppUser | null>(null);
   const [isProfileLoading, setIsProfileLoading] = useState(true);
 
-  // On first mount, ensure the Firestore profile exists via a server action.
-  // The server action creates the profile using Admin SDK and fires the welcome
-  // email entirely server-side (no client-side secret exposure, no bypass risk).
-  useEffect(() => {
-    if (isAuthLoading || !user) return;
-    void (async () => {
-      try {
-        const idToken = await user.getIdToken();
-        await bootstrapUserProfile(idToken);
-      } catch {
-        // Failure is non-fatal — the real-time subscription below keeps the UI working
-      }
-    })();
-  }, [user, isAuthLoading]);
-
-  // Real-time subscription so server-side enrollment updates (Paystack webhook) reflect immediately
   useEffect(() => {
     if (isAuthLoading) return;
 
-    if (!user || !firestore) {
+    if (!user) {
       setProfile(null);
       setIsProfileLoading(false);
       return;
     }
 
-    setIsProfileLoading(true);
-    const userRef = doc(firestore, 'users', user.uid);
+    let active = true;
 
-    const unsubscribe = onSnapshot(
-      userRef,
-      (snap) => {
-        if (snap.exists()) {
-          setProfile(snap.data() as AppUser);
+    const loadProfile = async () => {
+      setIsProfileLoading(true);
+      try {
+        // Ensure profile exists
+        try {
+          const idToken = await user.getIdToken();
+          await bootstrapUserProfile(idToken);
+        } catch (bootstrapErr) {
+          console.warn('[StudentProfile] Bootstrap failed:', bootstrapErr);
+        }
+
+        const res = await getUserProfileAction();
+        if (!active) return;
+
+        if (res.success && res.user) {
+          setProfile({
+            ...res.user,
+            uid: res.user.id,
+            emailVerified: true,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            wishlistCourseIds: [],
+          } as unknown as AppUser);
         } else {
-          // Document not yet created – use a local default while the bootstrap runs
+          // Use default fallback if not found in db yet
           setProfile(buildDefaultUserProfile({
             uid: user.uid,
-            displayName: user.displayName,
-            email: user.email,
-            photoURL: user.photoURL,
+            displayName: user.displayName || null,
+            email: user.email || null,
+            photoURL: user.photoURL || null,
           }));
         }
-        setIsProfileLoading(false);
-      },
-      (error) => {
-        console.error('[StudentProfile] Firestore subscription error:', error);
-        setIsProfileLoading(false);
+      } catch (err) {
+        console.error('[StudentProfile] Failed to load profile:', err);
+      } finally {
+        if (active) {
+          setIsProfileLoading(false);
+        }
       }
-    );
+    };
 
-    return () => unsubscribe();
-  }, [user, isAuthLoading, firestore]);
+    loadProfile();
+
+    return () => {
+      active = false;
+    };
+  }, [user, isAuthLoading]);
 
   return { user, profile, isLoading: isAuthLoading || isProfileLoading };
 }

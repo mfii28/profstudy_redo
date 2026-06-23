@@ -123,19 +123,19 @@ async function recalculateCartTotal(
 
     // Build maps for quick lookups (doc.id → data)
     const courseMap = new Map<string, any>(
-      courseSnaps.filter(d => d.exists).map(d => [d.id, d.data()])
+      courseSnaps.filter((d: any) => d.exists).map((d: any) => [d.id, d.data()])
     );
     const productMap = new Map<string, any>(
-      productSnaps.filter(d => d.exists).map(d => [d.id, d.data()])
+      productSnaps.filter((d: any) => d.exists).map((d: any) => [d.id, d.data()])
     );
 
     logger.debug('[Checkout] Firestore fetch results', {
       coursesFetched: courseSnaps.length,
       coursesFound: courseMap.size,
-      coursesMissing: courseSnaps.filter(d => !d.exists).map(d => d.id),
+      coursesMissing: courseSnaps.filter((d: any) => !d.exists).map((d: any) => d.id),
       productsFetched: productSnaps.length,
       productsFound: productMap.size,
-      productsMissing: productSnaps.filter(d => !d.exists).map(d => d.id),
+      productsMissing: productSnaps.filter((d: any) => !d.exists).map((d: any) => d.id),
     });
 
     // Process items with validated prices
@@ -376,7 +376,7 @@ export async function initiateCartCheckout(
     // Only block if payment was actually sent to Paystack (status === 'payment_initiated').
     // A status of 'initiated' means a previous attempt failed before reaching the payment
     // gateway, so retrying should be allowed.
-    let sessionRef: FirebaseFirestore.DocumentReference | null = null;
+    let sessionRef: any = null;
     if (checkoutSessionId) {
       sessionRef = adminDb.doc(`checkoutSessions/${checkoutSessionId}`);
       const sessionSnap = await sessionRef.get();

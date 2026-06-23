@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Logo } from '@/components/logo';
 import { useToast } from '@/hooks/use-toast';
 import { registerUser, checkRegistrationNumberExistsAction } from '@/app/actions/user';
-import { signIn } from 'next-auth/react';
+import { supabase } from '@/lib/supabase-client';
 import { Eye, EyeOff, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { validatePassword, validateFullName } from '@/lib/password-validation';
 import {
@@ -274,11 +274,38 @@ export default function SignupPage() {
         (typeof window !== 'undefined' && sessionStorage.getItem('signup_intent') === 'tutor') ||
         (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('tutor') === '1');
 
-      const signupRes = await registerUser({
-        name: fullName,
-        email,
+      const role = isTutorSignup ? 'tutor' : 'student';
+
+      // 1. Sign up the user via Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: email.toLowerCase().trim(),
         password,
-        role: isTutorSignup ? 'tutor' : 'student',
+        options: {
+          data: {
+            name: fullName,
+            role: role,
+          },
+        },
+      });
+
+      if (authError) {
+        toast({ variant: 'destructive', title: 'Signup Failed', description: authError.message });
+        setIsLoading(false);
+        return;
+      }
+
+      if (!authData.user) {
+        toast({ variant: 'destructive', title: 'Signup Failed', description: 'No user data returned from authentication service.' });
+        setIsLoading(false);
+        return;
+      }
+
+      // 2. Create the user profile in the database via server action
+      const signupRes = await registerUser({
+        id: authData.user.id,
+        name: fullName,
+        email: email.toLowerCase().trim(),
+        role: role,
         phone_number: phoneCheck.normalized || phoneNumber,
         student_registration_number: regNormalized,
         affiliate_link: affiliateLink && affCheck.isValid ? (affCheck.sanitized || affiliateLink) : undefined,
@@ -291,24 +318,6 @@ export default function SignupPage() {
         return;
       }
 
-      // Automatically sign in via NextAuth credentials provider
-      const signinRes = await signIn('credentials', {
-        email: email.toLowerCase().trim(),
-        password,
-        redirect: false,
-      });
-
-      if (signinRes?.error) {
-        toast({
-          variant: 'destructive',
-          title: 'Sign In Failed',
-          description: 'Account created, but could not sign in automatically. Please log in.',
-        });
-        setIsLoading(false);
-        router.push('/login');
-        return;
-      }
-
       if (typeof window !== 'undefined') {
         localStorage.removeItem('studymate_ref');
         localStorage.removeItem('studymate_ref_link');
@@ -317,22 +326,16 @@ export default function SignupPage() {
 
       // Set session cookie for local compatibility layers
       const secure = window.location.protocol === 'https:' ? 'Secure;' : '';
-      const mockSessionToken = Buffer.from(JSON.stringify({ uid: signupRes.user.id, role: signupRes.user.role })).toString('base64');
+      const emailVerified = !!authData.user.email_confirmed_at;
+      const mockSessionToken = btoa(JSON.stringify({ uid: authData.user.id, role: role, emailVerified }));
       document.cookie = `__session=${mockSessionToken}; path=/; max-age=3600; SameSite=Lax; ${secure}`;
 
-      if (signupRes.otpError) {
-        toast({
-          title: 'Account Created',
-          description: 'Verification email could not be sent. You can request a new code from the next screen.',
-        });
-      } else {
-        toast({
-          title: 'Account Created',
-          description: 'A 6-digit verification code has been sent to your inbox.',
-        });
-      }
+      toast({
+        title: 'Account Created',
+        description: 'A 6-digit verification code has been sent to your inbox.',
+      });
 
-      router.replace(`/verify-email?uid=${signupRes.user.id}`);
+      router.replace(`/verify-email?uid=${authData.user.id}`);
     } catch (error: any) {
       toast({ variant: 'destructive', title: 'Signup Failed', description: error.message || 'An unexpected error occurred.' });
       setIsLoading(false);
@@ -342,7 +345,13 @@ export default function SignupPage() {
   const handleGoogleSignup = async () => {
     setIsLoading(true);
     try {
-      await signIn('google', { callbackUrl: '/dashboard' });
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/dashboard`,
+        },
+      });
+      if (error) throw error;
     } catch (error: any) {
       toast({ variant: 'destructive', title: 'Google Signup Failed', description: error.message });
       setIsLoading(false);

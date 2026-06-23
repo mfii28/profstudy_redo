@@ -15,7 +15,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Logo } from '@/components/logo';
 import { useToast } from '@/hooks/use-toast';
-import { signIn, signOut, getSession } from 'next-auth/react';
+import { supabase } from '@/lib/supabase-client';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 
 export default function AdminLoginPage() {
@@ -31,29 +31,32 @@ export default function AdminLoginPage() {
     setIsLoading(true);
 
     try {
-      const res = await signIn('credentials', {
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: email.toLowerCase().trim(),
         password,
-        redirect: false,
       });
 
-      if (res?.error) {
+      if (error) {
         toast({
           variant: 'destructive',
           title: 'Login Failed',
-          description: 'Invalid email or password.',
+          description: error.message || 'Invalid email or password.',
         });
         setIsLoading(false);
         return;
       }
 
-      // Fetch the updated session to get the user's role
-      const session = await getSession();
-      const role = (session?.user as any)?.role || 'student';
+      const user = data.user;
+      if (!user) throw new Error('No user data returned.');
+
+      const role = user.user_metadata?.role || 'student';
 
       if (['admin', 'superadmin', 'subadmin'].includes(role)) {
         // Set cookie for compatibility
-        document.cookie = `__session=${tokenPlaceholder(session)}; path=/; max-age=3600; SameSite=Lax`;
+        const secure = window.location.protocol === 'https:' ? 'Secure;' : '';
+        const emailVerified = !!user.email_confirmed_at;
+        const mockSessionToken = btoa(JSON.stringify({ uid: user.id, role, emailVerified }));
+        document.cookie = `__session=${mockSessionToken}; path=/; max-age=3600; SameSite=Lax; ${secure}`;
 
         toast({
           title: 'Login Successful',
@@ -61,7 +64,7 @@ export default function AdminLoginPage() {
         });
         router.replace('/admin');
       } else {
-        await signOut({ redirect: false });
+        await supabase.auth.signOut();
         toast({
           variant: 'destructive',
           title: 'Access Denied',
@@ -138,10 +141,4 @@ export default function AdminLoginPage() {
       </div>
     </div>
   );
-}
-
-function tokenPlaceholder(session: any) {
-  if (!session?.user) return '';
-  const payload = { uid: session.user.id, role: session.user.role };
-  return Buffer.from(JSON.stringify(payload)).toString('base64');
 }

@@ -1,40 +1,40 @@
-export function getFirestore() { return {}; }
-export function initializeFirestore() { return {}; }
-export function doc() { return {}; }
-export function collection() { return {}; }
-export function query() { return {}; }
-export function where() { return {}; }
-export function limit() { return {}; }
-export function orderBy() { return {}; }
-export async function getDocs() { return { empty: true, docs: [] }; }
-export async function getDoc() { return { exists: () => false, data: () => null }; }
-export async function setDoc() {}
-export async function updateDoc() {}
-export async function addDoc() { return { id: 'stub' }; }
-export async function deleteDoc() {}
-export function onSnapshot(ref: any, callback: (snap: any) => void) {
+export function getFirestore(...args: any[]): any { return {}; }
+export function initializeFirestore(...args: any[]): any { return {}; }
+export function doc(...args: any[]): any { return {}; }
+export function collection(...args: any[]): any { return {}; }
+export function query(...args: any[]): any { return {}; }
+export function where(...args: any[]): any { return {}; }
+export function limit(...args: any[]): any { return {}; }
+export function orderBy(...args: any[]): any { return {}; }
+export async function getDocs(...args: any[]): Promise<any> { return { empty: true, docs: [] as any[] }; }
+export async function getDoc(...args: any[]): Promise<any> { return { exists: () => false, data: () => null }; }
+export async function setDoc(...args: any[]): Promise<any> {}
+export async function updateDoc(...args: any[]): Promise<any> {}
+export async function addDoc(...args: any[]): Promise<any> { return { id: 'stub' }; }
+export async function deleteDoc(...args: any[]): Promise<any> {}
+export function onSnapshot(ref: any, ...args: any[]): any {
   return () => {};
 }
-export function writeBatch() {
+export function writeBatch(...args: any[]): any {
   return {
-    set: () => {},
-    update: () => {},
-    delete: () => {},
-    commit: async () => {},
+    set: (...args: any[]) => {},
+    update: (...args: any[]) => {},
+    delete: (...args: any[]) => {},
+    commit: async (...args: any[]) => {},
   };
 }
-export function serverTimestamp() { return new Date().toISOString(); }
-export function increment(val: number) { return val; }
-export function arrayUnion(...args: any[]) { return args; }
-export function arrayRemove(...args: any[]) { return args; }
-export async function runTransaction(db: any, updateFn: any) { return updateFn({
-  get: async () => ({ exists: () => false, data: () => null }),
-  set: () => {},
-  update: () => {},
-  delete: () => {},
+export function serverTimestamp(...args: any[]): any { return new Date().toISOString(); }
+export function increment(val: number): any { return val; }
+export function arrayUnion(...args: any[]): any { return args; }
+export function arrayRemove(...args: any[]): any { return args; }
+export async function runTransaction(db: any, updateFn: any): Promise<any> { return updateFn({
+  get: async (...args: any[]) => ({ exists: () => false, data: () => null }),
+  set: (...args: any[]) => {},
+  update: (...args: any[]) => {},
+  delete: (...args: any[]) => {},
 }); }
-export function documentId() { return 'id'; }
-export function startAfter(...args: any[]) { return {}; }
+export function documentId(...args: any[]): any { return 'id'; }
+export function startAfter(...args: any[]): any { return {}; }
 
 export class Timestamp {
   seconds: number;
@@ -68,5 +68,12 @@ export class Timestamp {
 
 export type Firestore = any;
 export type DocumentData = any;
-export type QueryDocumentSnapshot = any;
+export type QueryDocumentSnapshot<T = any> = any;
 export type FieldValue = any;
+export type Query<T = any> = any;
+export type FirestoreError = any;
+export type QuerySnapshot<T = any> = any;
+export type CollectionReference<T = any> = any;
+export type DocumentReference<T = any> = any;
+export type DocumentSnapshot<T = any> = any;
+export type SetOptions = any;

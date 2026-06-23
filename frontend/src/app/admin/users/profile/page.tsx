@@ -46,7 +46,7 @@ export default function AdminProfilePage() {
           setDisplayName(res.user.name || '');
           setBio(res.user.bio || '');
           if (res.user.avatar) {
-            setAvatarPreview(resolveAvatarUrl(res.user.avatar));
+            setAvatarPreview(resolveAvatarUrl(res.user.avatar) || null);
           }
         }
       } catch (err: any) {

@@ -119,7 +119,7 @@ export async function backfillLiveClasses(
     ]);
 
     const coveredCourseIds = new Set<string>();
-    liveClassSnap.docs.forEach((d) => {
+    liveClassSnap.docs.forEach((d: any) => {
       const data = d.data() as { courseId?: string };
       if (data.courseId) coveredCourseIds.add(data.courseId);
     });

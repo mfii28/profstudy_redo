@@ -1,5 +1,6 @@
 import { getGlobalSettingsAction, setGlobalSettingsAction } from '@/app/actions/settings';
 import { type GlobalSettings } from './db';
+export type { GlobalSettings };
 
 /**
  * @fileOverview Isomorphic Platform Governance Service.

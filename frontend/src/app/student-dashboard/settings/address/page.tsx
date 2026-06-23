@@ -8,17 +8,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { MapPin, Loader2 } from "lucide-react";
-import { useUser } from "@/firebase";
+import { useStudentProfile } from "@/hooks/use-student-profile";
 import { updateUserAddress } from "@/lib/user-data";
-import { type UserAddress, type User as UserProfile } from "@/lib/db";
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '@/firebase/firestore';
+import { type UserAddress } from "@/lib/db";
 
 export default function AddressSettingsPage() {
-  const { user, isLoading: isUserLoading } = useUser();
+  const { user, profile: userProfile, isLoading } = useStudentProfile();
   const { toast } = useToast();
   const [isSaving, setIsSaving] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const [address, setAddress] = useState<UserAddress>({
     line1: '',
     line2: '',
@@ -29,25 +26,26 @@ export default function AddressSettingsPage() {
   });
 
   useEffect(() => {
-    const fetchUserProfile = async () => {
-      if (user) {
-        setIsLoading(true);
-        const userDocRef = doc(db, 'users', user.uid);
-        const userDocSnap = await getDoc(userDocRef);
-        if (userDocSnap.exists()) {
-          const userProfile = userDocSnap.data() as UserProfile;
-          if (userProfile.address) {
-            setAddress(userProfile.address);
-          }
+    if (userProfile?.address) {
+      try {
+        const parsed = typeof userProfile.address === 'string'
+          ? JSON.parse(userProfile.address)
+          : userProfile.address;
+        if (parsed) {
+          setAddress({
+            line1: parsed.line1 || '',
+            line2: parsed.line2 || '',
+            city: parsed.city || '',
+            region: parsed.region || 'greater-accra',
+            zip: parsed.zip || '',
+            phone: parsed.phone || ''
+          });
         }
-        setIsLoading(false);
+      } catch (e) {
+        // Fallback if it is not valid JSON
       }
-    };
-
-    if (!isUserLoading) {
-      fetchUserProfile();
     }
-  }, [user, isUserLoading]);
+  }, [userProfile]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,7 +62,7 @@ export default function AddressSettingsPage() {
     }
   };
 
-  if (isUserLoading || isLoading) {
+  if (isLoading) {
       return (
           <Card>
               <CardHeader>

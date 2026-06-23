@@ -217,8 +217,8 @@ export async function getCommunicationAttempts(params: {
     [key: string]: unknown;
   };
   const items = snap.docs
-    .map((doc) => ({ id: doc.id, ...(doc.data() as Record<string, unknown>) }) as AttemptRow)
-    .filter((item) => {
+    .map((doc: any) => ({ id: doc.id, ...(doc.data() as Record<string, unknown>) }) as AttemptRow)
+    .filter((item: any) => {
       const status = String(item.status || '');
       if (statusFilter !== 'all' && status !== statusFilter) return false;
       if (!search) return true;

@@ -2,9 +2,9 @@
 
 import React from 'react';
 import { Loader2 } from 'lucide-react';
-import { useUser, useFirestore } from '@/firebase';
+import { useUser } from '@/firebase';
 import { useRouter } from 'next/navigation';
-import { doc, getDoc } from 'firebase/firestore';
+import { getUserProfileAction } from '@/app/actions/user';
 
 export default function ClassroomLayout({
   children,
@@ -13,7 +13,6 @@ export default function ClassroomLayout({
 }) {
   const router = useRouter();
   const { user: currentUser, isLoading } = useUser();
-  const firestore = useFirestore();
   const [mounted, setMounted] = React.useState(false);
   const [adminProfile, setAdminProfile] = React.useState<any>(null);
   const [isVerifying, setIsVerifying] = React.useState(true);
@@ -31,24 +30,19 @@ export default function ClassroomLayout({
       return;
     }
 
-    if (!firestore) {
-      setIsVerifying(false);
-      return;
-    }
-
     const verifyAdminAccess = async () => {
       try {
-        const userRef = doc(firestore, 'users', currentUser.uid);
-        const userSnap = await getDoc(userRef);
-        const userData = userSnap.data();
-        
-        if (!['admin', 'subadmin', 'superadmin'].includes(userData?.role || '')) {
-          router.replace('/student-dashboard');
-          return;
+        const res = await getUserProfileAction();
+        if (res.success && res.user) {
+          const profile = res.user;
+          const role = String(profile.role || '').trim().toLowerCase();
+          if (['admin', 'subadmin', 'superadmin'].includes(role)) {
+            setAdminProfile(profile);
+            setIsVerifying(false);
+            return;
+          }
         }
-        
-        setAdminProfile(userData);
-        setIsVerifying(false);
+        router.replace('/student-dashboard');
       } catch (error) {
         console.error('Error verifying admin profile:', error);
         router.replace('/student-dashboard');
@@ -56,7 +50,7 @@ export default function ClassroomLayout({
     };
 
     void verifyAdminAccess();
-  }, [mounted, isLoading, currentUser, firestore, router]);
+  }, [mounted, isLoading, currentUser, router]);
 
   if (!mounted || isLoading || isVerifying) {
     return (
