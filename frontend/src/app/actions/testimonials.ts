@@ -1,6 +1,7 @@
 'use server';
 
-import { adminAuth, adminDb } from '@/firebase/admin';
+import prisma from '@/lib/prisma';
+import { createClient } from '@/lib/supabase-server';
 import { z } from 'zod';
 import { logger } from '@/lib/logging';
 import type { TestimonialGroup } from '@/lib/db';
@@ -27,28 +28,29 @@ export async function submitUserTestimonial(
       return { error: 'Please fill in all fields. Your story should be at least 20 characters.' };
     }
 
-    const decoded = await adminAuth.verifyIdToken(idToken);
-    const now = new Date().toISOString();
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return { error: 'Authentication required' };
+    }
 
-    await adminDb.collection('testimonials').add({
-      name: parsed.data.name,
-      role: parsed.data.role,
-      text: parsed.data.text,
-      avatar: '',
-      status: 'pending',
-      group: parsed.data.group ?? 'general',
-      source: 'user',
-      submittedBy: decoded.uid,
-      submittedAt: now,
+    await prisma.testimonial.create({
+      data: {
+        name: parsed.data.name,
+        role: parsed.data.role,
+        text: parsed.data.text,
+        avatar: '',
+        status: 'pending',
+        group: parsed.data.group ?? 'general',
+        source: 'user',
+        submittedBy: user.id,
+      },
     });
 
-    logger.info('[Testimonials] User submission received', { uid: decoded.uid });
+    logger.info('[Testimonials] User submission received', { uid: user.id });
     return { success: true as const };
   } catch (error: unknown) {
     const err = error as { code?: string; message?: string };
-    if (err?.code === 'auth/id-token-expired' || err?.code === 'auth/argument-error') {
-      return { error: 'Your session has expired. Please sign in again.' };
-    }
     logger.error('[Testimonials] Submit failed', { message: err?.message });
     return { error: 'Could not submit your testimonial. Please try again.' };
   }

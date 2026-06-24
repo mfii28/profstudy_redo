@@ -1,7 +1,7 @@
 'use server';
 
-import { adminDb, adminAuth, FieldValue } from '@/firebase/admin';
-import { isAdminRole, requireAdminContextFromIdToken } from '@/lib/trusted-server-context';
+import prisma from '@/lib/prisma';
+import { createClient } from '@/lib/supabase-server';
 import type { Course } from '@/lib/db';
 
 function buildPlaceholderDoc(
@@ -32,11 +32,8 @@ function buildPlaceholderDoc(
 
 async function getInstructorName(tutorId: string): Promise<string> {
   try {
-    const snap = await adminDb.doc(`users/${tutorId}`).get();
-    if (snap.exists) {
-      const data = snap.data() as { name?: string };
-      return data?.name || 'Instructor';
-    }
+    const user = await prisma.user.findUnique({ where: { id: tutorId } });
+    return user?.name || 'Instructor';
   } catch (err: unknown) {
     console.warn('[getInstructorName] Could not fetch tutor name', tutorId, err instanceof Error ? err.message : String(err));
   }
@@ -45,10 +42,7 @@ async function getInstructorName(tutorId: string): Promise<string> {
 
 /**
  * Checks whether a live class already exists for the given course.
- * If not, creates a placeholder one via Admin SDK (bypasses user-facing API checks).
- *
- * Authorization: caller must be the course tutor OR an admin/superadmin/subadmin.
- * Idempotent: checks liveClasses collection before writing; safe to call repeatedly.
+ * If not, creates a placeholder one via Prisma.
  */
 export async function ensureLiveClassForCourse(
   courseId: string,
@@ -57,44 +51,53 @@ export async function ensureLiveClassForCourse(
   idToken: string
 ): Promise<{ created: boolean; error?: string }> {
   try {
-    const decoded = await adminAuth.verifyIdToken(idToken);
-    const callerId = decoded.uid;
+    const supabase = await createClient();
+    const { data: { user: caller } } = await supabase.auth.getUser();
+    if (!caller) return { created: false, error: 'Unauthorized' };
+    const callerId = caller.id;
 
     const isOwner = callerId === tutorId;
     let callerIsAdmin = false;
     if (!isOwner) {
-      const callerDoc = await adminDb.doc(`users/${callerId}`).get();
-      const callerData = callerDoc.data() as { role?: string } | undefined;
-      callerIsAdmin = isAdminRole(callerData?.role as Parameters<typeof isAdminRole>[0]);
+      const dbUser = await prisma.user.findUnique({ where: { id: callerId } });
+      callerIsAdmin = ['admin', 'superadmin', 'subadmin'].includes(dbUser?.role || '');
       if (!callerIsAdmin) {
         return { created: false, error: 'Access denied: must be course tutor or admin.' };
       }
     }
 
     if (isOwner && !callerIsAdmin) {
-      const courseDoc = await adminDb.doc(`courses/${courseId}`).get();
-      if (courseDoc.exists) {
-        const courseOwnerData = courseDoc.data() as { tutorId?: string };
-        if (courseOwnerData.tutorId && courseOwnerData.tutorId !== callerId) {
-          return { created: false, error: 'Access denied: course belongs to a different tutor.' };
-        }
+      const course = await prisma.course.findUnique({ where: { id: courseId } });
+      if (course && course.tutorId !== callerId) {
+        return { created: false, error: 'Access denied: course belongs to a different tutor.' };
       }
     }
 
-    const existing = await adminDb
-      .collection('liveClasses')
-      .where('courseId', '==', courseId)
-      .limit(1)
-      .get();
+    const existing = await prisma.liveClass.findFirst({
+      where: { courseId }
+    });
 
-    if (!existing.empty) return { created: false };
+    if (existing) return { created: false };
 
     const instructorName = await getInstructorName(tutorId);
     const docData = buildPlaceholderDoc(courseId, courseTitle, tutorId, instructorName);
-    await adminDb.doc(`liveClasses/${docData.id}`).set(docData);
+    
+    await prisma.liveClass.create({
+      data: {
+        id: docData.id as string,
+        title: docData.title as string,
+        courseId,
+        joinUrl: docData.meetingLink as string,
+        instructor: instructorName,
+        instructorId: tutorId,
+        startTime: new Date(docData.startTime as string),
+        durationMinutes: docData.durationMinutes as number,
+        status: docData.status as string,
+      }
+    });
 
     return { created: true };
-  } catch (err: unknown) {
+  } catch (err: any) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('[ensureLiveClassForCourse]', message);
     return { created: false, error: message };
@@ -109,49 +112,62 @@ export async function backfillLiveClasses(
   idToken: string
 ): Promise<{ created: number; skipped: number; error?: string }> {
   try {
-    const adminCtx = await requireAdminContextFromIdToken(idToken, 'courses:approve');
-    if (!adminCtx.ok) return { created: 0, skipped: 0, error: adminCtx.error };
-    const uid = adminCtx.userId;
+    const supabase = await createClient();
+    const { data: { user: caller } } = await supabase.auth.getUser();
+    if (!caller) return { created: 0, skipped: 0, error: 'Unauthorized' };
+    
+    const dbUser = await prisma.user.findUnique({ where: { id: caller.id } });
+    const isCallerAdmin = ['admin', 'superadmin', 'subadmin'].includes(dbUser?.role || '');
+    if (!isCallerAdmin) return { created: 0, skipped: 0, error: 'Unauthorized' };
 
-    const [coursesSnap, liveClassSnap] = await Promise.all([
-      adminDb.collection('courses').get(),
-      adminDb.collection('liveClasses').get(),
+    const [courses, liveClasses] = await Promise.all([
+      prisma.course.findMany(),
+      prisma.liveClass.findMany(),
     ]);
 
     const coveredCourseIds = new Set<string>();
-    liveClassSnap.docs.forEach((d: any) => {
-      const data = d.data() as { courseId?: string };
-      if (data.courseId) coveredCourseIds.add(data.courseId);
+    liveClasses.forEach(lc => {
+      if (lc.courseId) coveredCourseIds.add(lc.courseId);
     });
 
     let created = 0;
     let skipped = 0;
 
-    for (const courseDoc of coursesSnap.docs) {
-      const courseId = courseDoc.id;
+    for (const course of courses) {
+      const courseId = course.id;
       if (coveredCourseIds.has(courseId)) {
         skipped++;
         continue;
       }
 
-      const courseData = courseDoc.data() as { title?: string; tutorId?: string };
-      const tutorId = courseData.tutorId || uid;
-      const instructorName = courseData.tutorId
-        ? await getInstructorName(courseData.tutorId)
-        : 'Instructor';
+      const tutorId = course.tutorId;
+      const instructorName = await getInstructorName(tutorId);
 
       const docData = buildPlaceholderDoc(
         courseId,
-        courseData.title || 'Untitled Course',
+        course.title || 'Untitled Course',
         tutorId,
         instructorName
       );
-      await adminDb.doc(`liveClasses/${docData.id}`).set(docData);
+      
+      await prisma.liveClass.create({
+        data: {
+          id: docData.id as string,
+          title: docData.title as string,
+          courseId,
+          joinUrl: docData.meetingLink as string,
+          instructor: instructorName,
+          instructorId: tutorId,
+          startTime: new Date(docData.startTime as string),
+          durationMinutes: docData.durationMinutes as number,
+          status: docData.status as string,
+        }
+      });
       created++;
     }
 
     return { created, skipped };
-  } catch (err: unknown) {
+  } catch (err: any) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('[backfillLiveClasses]', message);
     return { created: 0, skipped: 0, error: message };
@@ -160,15 +176,6 @@ export async function backfillLiveClasses(
 
 /**
  * Server-side course creation with automatic live class initialization.
- *
- * This action:
- *   1. Verifies the caller's identity and authorization (must be tutorId or admin).
- *   2. Checks whether the course doc previously existed BEFORE writing.
- *   3. Writes the course (and tutorDetails.coursesTaught) via Admin SDK.
- *   4. If the course was brand-new, creates a placeholder live class atomically.
- *
- * Used only for initial course creation. Subsequent saves (updates) use the
- * client-side saveCourse path which is sufficient for non-creation edits.
  */
 export async function saveNewCourseWithLiveClass(
   course: Course,
@@ -176,53 +183,194 @@ export async function saveNewCourseWithLiveClass(
   idToken: string
 ): Promise<{ liveClassCreated: boolean; error?: string }> {
   try {
-    const decoded = await adminAuth.verifyIdToken(idToken);
-    const callerId = decoded.uid;
+    const supabase = await createClient();
+    const { data: { user: caller } } = await supabase.auth.getUser();
+    if (!caller) return { liveClassCreated: false, error: 'Unauthorized' };
+    const callerId = caller.id;
 
     const isOwner = callerId === tutorId;
     if (!isOwner) {
-      const callerDoc = await adminDb.doc(`users/${callerId}`).get();
-      const callerData = callerDoc.data() as { role?: string } | undefined;
-      const callerIsAdmin = isAdminRole(callerData?.role as Parameters<typeof isAdminRole>[0]);
-      if (!callerIsAdmin) {
+      const dbUser = await prisma.user.findUnique({ where: { id: callerId } });
+      const isCallerAdmin = ['admin', 'superadmin', 'subadmin'].includes(dbUser?.role || '');
+      if (!isCallerAdmin) {
         return { liveClassCreated: false, error: 'Access denied: must be course tutor or admin.' };
       }
     }
 
-    const courseRef = adminDb.doc(`courses/${course.id}`);
-    const existingSnap = await courseRef.get();
-    const isNewCourse = !existingSnap.exists;
+    const existingCourse = await prisma.course.findUnique({
+      where: { id: course.id }
+    });
+    const isNewCourse = !existingCourse;
 
-    const now = new Date().toISOString();
-    const coursePayload: Record<string, unknown> = {
-      ...course,
+    const instructorName = await getInstructorName(tutorId);
+    
+    // Save course in Prisma
+    const courseData: any = {
+      title: course.title,
+      description: course.description || null,
+      price: course.price || null,
+      isFree: course.isFree || false,
+      status: course.status || 'Draft',
       tutorId,
-      updatedAt: now,
     };
-    const cleaned = Object.fromEntries(
-      Object.entries(coursePayload).filter(([, v]) => v !== undefined)
-    );
-
-    const batch = adminDb.batch();
-    batch.set(courseRef, cleaned, { merge: true });
-    batch.set(
-      adminDb.doc(`users/${tutorId}`),
-      { tutorDetails: { coursesTaught: FieldValue.arrayUnion(course.id) } },
-      { merge: true }
-    );
-
-    if (isNewCourse) {
-      const instructorName = await getInstructorName(tutorId);
-      const liveDoc = buildPlaceholderDoc(course.id, course.title, tutorId, instructorName);
-      batch.set(adminDb.doc(`liveClasses/${liveDoc.id}`), liveDoc);
+    
+    let tutorDetail = await prisma.tutorDetail.findUnique({ where: { userId: tutorId } });
+    if (!tutorDetail) {
+      tutorDetail = await prisma.tutorDetail.create({
+        data: {
+          userId: tutorId,
+          verificationStatus: 'approved'
+        }
+      });
     }
 
-    await batch.commit();
+    await prisma.course.upsert({
+      where: { id: course.id },
+      update: {
+        ...courseData,
+        tutorId: tutorDetail.id
+      },
+      create: {
+        id: course.id,
+        ...courseData,
+        tutorId: tutorDetail.id
+      }
+    });
+
+    if (isNewCourse) {
+      const liveDoc = buildPlaceholderDoc(course.id, course.title, tutorId, instructorName);
+      await prisma.liveClass.create({
+        data: {
+          id: liveDoc.id as string,
+          title: liveDoc.title as string,
+          courseId: course.id,
+          joinUrl: liveDoc.meetingLink as string,
+          instructor: instructorName,
+          instructorId: tutorId,
+          startTime: new Date(liveDoc.startTime as string),
+          durationMinutes: liveDoc.durationMinutes as number,
+          status: liveDoc.status as string,
+        }
+      });
+    }
 
     return { liveClassCreated: isNewCourse };
-  } catch (err: unknown) {
+  } catch (err: any) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('[saveNewCourseWithLiveClass]', message);
     return { liveClassCreated: false, error: message };
+  }
+}
+
+export async function getLiveClassesAction(): Promise<any[]> {
+  try {
+    const liveClasses = await prisma.liveClass.findMany({
+      orderBy: { startTime: 'asc' },
+    });
+    return liveClasses.map(lc => ({
+      id: lc.id,
+      title: lc.title,
+      courseId: lc.courseId || undefined,
+      meetingLink: lc.joinUrl || undefined,
+      instructor: lc.instructor || 'Instructor',
+      instructorId: lc.instructorId,
+      startTime: lc.startTime.toISOString(),
+      durationMinutes: lc.durationMinutes || undefined,
+      status: lc.status as any,
+    }));
+  } catch (error) {
+    console.error('[LiveClassAction] Fetch error:', error);
+    return [];
+  }
+}
+
+export async function getLiveClassesForStudentAction(enrolledCourseIds: string[]): Promise<any[]> {
+  try {
+    const liveClasses = await prisma.liveClass.findMany({
+      where: {
+        courseId: { in: enrolledCourseIds }
+      },
+      orderBy: { startTime: 'asc' },
+    });
+    return liveClasses.map(lc => ({
+      id: lc.id,
+      title: lc.title,
+      courseId: lc.courseId || undefined,
+      meetingLink: lc.joinUrl || undefined,
+      instructor: lc.instructor || 'Instructor',
+      instructorId: lc.instructorId,
+      startTime: lc.startTime.toISOString(),
+      durationMinutes: lc.durationMinutes || undefined,
+      status: lc.status as any,
+    }));
+  } catch (error) {
+    console.error('[LiveClassAction] Student fetch error:', error);
+    return [];
+  }
+}
+
+export async function getLiveClassesByTutorIdAction(tutorId: string): Promise<any[]> {
+  try {
+    const liveClasses = await prisma.liveClass.findMany({
+      where: { instructorId: tutorId },
+      orderBy: { startTime: 'asc' },
+    });
+    return liveClasses.map(lc => ({
+      id: lc.id,
+      title: lc.title,
+      courseId: lc.courseId || undefined,
+      meetingLink: lc.joinUrl || undefined,
+      instructor: lc.instructor || 'Instructor',
+      instructorId: lc.instructorId,
+      startTime: lc.startTime.toISOString(),
+      durationMinutes: lc.durationMinutes || undefined,
+      status: lc.status as any,
+    }));
+  } catch (error) {
+    console.error('[LiveClassAction] Tutor fetch error:', error);
+    return [];
+  }
+}
+
+export async function addLiveClassAction(newClass: any): Promise<void> {
+  try {
+    await prisma.liveClass.upsert({
+      where: { id: newClass.id },
+      update: {
+        title: newClass.title,
+        courseId: newClass.courseId || null,
+        joinUrl: newClass.meetingLink || null,
+        instructor: newClass.instructor,
+        instructorId: newClass.instructorId,
+        startTime: new Date(newClass.startTime),
+        durationMinutes: newClass.durationMinutes || null,
+        status: newClass.status || 'upcoming',
+      },
+      create: {
+        id: newClass.id,
+        title: newClass.title,
+        courseId: newClass.courseId || null,
+        joinUrl: newClass.meetingLink || null,
+        instructor: newClass.instructor,
+        instructorId: newClass.instructorId,
+        startTime: new Date(newClass.startTime),
+        durationMinutes: newClass.durationMinutes || null,
+        status: newClass.status || 'upcoming',
+      }
+    });
+  } catch (error) {
+    console.error('[LiveClassAction] Add error:', error);
+    throw new Error('Failed to save live class');
+  }
+}
+
+export async function deleteLiveClassAction(classId: string): Promise<void> {
+  try {
+    await prisma.liveClass.delete({
+      where: { id: classId }
+    });
+  } catch (error) {
+    console.error('[LiveClassAction] Delete error:', error);
+    throw new Error('Failed to delete live class');
   }
 }

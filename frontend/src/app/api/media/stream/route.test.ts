@@ -27,17 +27,16 @@ const adminMocks = vi.hoisted(() => {
         docData.set(path, { ...(existing as Record<string, unknown>), ...payload });
       }),
     })),
-    collection: vi.fn((path: string) => ({
-      where: vi.fn(() => ({
-        where: vi.fn(() => ({
-          limit: vi.fn(() => ({
-            get: vi.fn(async () => {
-              return collectionQueryResults.get(path) ?? { empty: true, docs: [] };
-            }),
-          })),
-        })),
-      })),
-    })),
+    collection: vi.fn((path: string) => {
+      const queryObj: any = {
+        where: vi.fn(() => queryObj),
+        limit: vi.fn(() => queryObj),
+        get: vi.fn(async () => {
+          return collectionQueryResults.get(path) ?? { empty: true, size: 0, docs: [] };
+        }),
+      };
+      return queryObj;
+    }),
   };
 
   return { adminDb, docData, collectionQueryResults };

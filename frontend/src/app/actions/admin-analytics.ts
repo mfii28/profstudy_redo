@@ -39,7 +39,7 @@ function emptyResult(error?: string): AdminAnalyticsOverviewResult {
   };
 }
 
-function buildRegistrationTrend(userDocs: FirebaseFirestore.QueryDocumentSnapshot[]): AnalyticsTrendPoint[] {
+function buildRegistrationTrend(userDocs: any[]): AnalyticsTrendPoint[] {
   const buckets = new Map<string, { label: string; count: number }>();
 
   for (let index = 13; index >= 0; index -= 1) {
@@ -62,7 +62,7 @@ function buildRegistrationTrend(userDocs: FirebaseFirestore.QueryDocumentSnapsho
       const parsed = new Date(rawCreatedAt);
       createdAt = Number.isNaN(parsed.getTime()) ? null : parsed;
     } else if (rawCreatedAt && typeof (rawCreatedAt as any).toDate === 'function') {
-      createdAt = (rawCreatedAt as FirebaseFirestore.Timestamp).toDate();
+      createdAt = (rawCreatedAt as any).toDate();
     }
 
     if (!createdAt) continue;
@@ -91,7 +91,7 @@ export async function getAdminAnalyticsOverview(idToken: string): Promise<AdminA
       adminDb.collection('subscriptionPlans').get(),
     ]);
 
-    let reviewsSnap: FirebaseFirestore.QuerySnapshot;
+    let reviewsSnap: any;
     try {
       reviewsSnap = await adminDb.collection('reviews').orderBy('date', 'desc').limit(8).get();
     } catch (reviewError: any) {
@@ -147,7 +147,7 @@ export async function getAdminAnalyticsOverview(idToken: string): Promise<AdminA
       const date = typeof rawDate === 'string'
         ? rawDate
         : rawDate && typeof (rawDate as any).toDate === 'function'
-          ? (rawDate as FirebaseFirestore.Timestamp).toDate().toISOString()
+          ? (rawDate as any).toDate().toISOString()
           : new Date().toISOString();
 
       return {

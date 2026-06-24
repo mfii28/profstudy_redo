@@ -169,14 +169,18 @@ model Order {
 }
 
 model LiveClass {
-  id           String   @id @default(cuid())
-  title        String
-  instructorId String
-  startTime    DateTime
-  meetingId    String?
-  joinUrl      String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id              String   @id @default(cuid())
+  title           String
+  instructor      String?
+  instructorId    String
+  startTime       DateTime
+  durationMinutes Int?
+  status          String   @default("upcoming") // upcoming, live, ended
+  courseId        String?
+  meetingId       String?
+  joinUrl         String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
 
 model Book {
@@ -294,6 +298,7 @@ model ClassroomPresence {
   classroom   Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
   userId      String
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status      String    @default("online")
   lastActive  DateTime  @default(now())
 }
 
@@ -359,3 +364,50 @@ model PlatformSettings {
 
   @@map("platformSettings")
 }
+
+model BlogPost {
+  id          String    @id @default(cuid())
+  title       String
+  slug        String    @unique
+  summary     String
+  content     String
+  coverUrl    String?
+  authorId    String
+  authorName  String?
+  category    String
+  tags        String[]
+  status      String    @default("Draft") // Draft, Published
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  viewCount   Int       @default(0)
+}
+
+model Testimonial {
+  id          String    @id @default(cuid())
+  name        String
+  role        String
+  avatar      String
+  text        String
+  status      String    @default("approved") // pending, approved, rejected
+  group       String    @default("general") // general, icag, citg, events
+  submittedBy String?
+  submittedAt DateTime  @default(now())
+  reviewedAt  DateTime?
+  reviewedBy  String?
+  source      String    @default("admin") // admin, user
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Payout {
+  id        String   @id @default(cuid())
+  tutorId   String
+  date      DateTime @default(now())
+  amount    Float
+  method    String // Bank Transfer, Mobile Money
+  status    String   @default("Pending") // Completed, Processing, Failed, Pending
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
