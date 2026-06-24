@@ -9,7 +9,7 @@
     "dev:turbo": "next dev --turbo -H 127.0.0.1 -p 5000",
     "genkit:dev": "genkit start -- tsx src/ai/dev.ts",
     "genkit:watch": "genkit start -- tsx --watch src/ai/dev.ts",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start -H 0.0.0.0 -p 5000",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
