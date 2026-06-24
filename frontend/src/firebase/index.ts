@@ -1,12 +1,14 @@
 'use client';
 
-import { initializeFirebase, getSdks } from './sdk-init';
-
-export { initializeFirebase, getSdks };
+/**
+ * Supabase Auth and data access layer.
+ * Replaces the previous Firebase integration.
+ *
+ * Core exports:
+ * - `useUser` — current authenticated user
+ * - `useAuth` — Supabase Auth client
+ * - `useFirestore` — deprecated (returns empty object; use REST API calls instead)
+ * - `SupabaseClientProvider` — wraps the app with auth context
+ */
 export * from './provider';
 export * from './client-provider';
-export * from './firestore/use-collection';
-export * from './firestore/use-doc';
-export * from './non-blocking-updates';
-export * from './errors';
-export * from './error-emitter';

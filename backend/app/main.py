@@ -1,16 +1,14 @@
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import get_db
-from app.api.v1.endpoints.storage import router as storage_router
-from app.api.v1.endpoints.payments import router as payments_router
-from app.api.v1.endpoints.rag import router as rag_router
-from app.api.v1.endpoints.ai_tutor import router as ai_tutor_router
+from app.api.v1.endpoints import api_v1_router
 from app.services.r2_service import r2_service
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
-    version="0.1.0",
+    version="0.2.0",
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url=f"{settings.API_V1_STR}/openapi.json"
@@ -19,29 +17,26 @@ app = FastAPI(
 # CORS configuration to allow local/production Next.js frontend to interact
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Adjust this to specific domains (e.g. localhost:3000) in production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Mount APIRouters
-app.include_router(storage_router, prefix=f"{settings.API_V1_STR}/storage", tags=["storage"])
-app.include_router(payments_router, prefix=f"{settings.API_V1_STR}/payments", tags=["payments"])
-app.include_router(rag_router, prefix=f"{settings.API_V1_STR}/rag", tags=["rag"])
-app.include_router(ai_tutor_router, prefix=f"{settings.API_V1_STR}/student", tags=["student"])
+# Mount all API v1 routes
+app.include_router(api_v1_router, prefix=settings.API_V1_STR)
 
 @app.get("/")
-def read_root():
+async def read_root():
     return {"message": "Welcome to StudyMate API"}
 
 @app.get("/health")
-def health_check(db = Depends(get_db)):
+async def health_check(db: AsyncSession = Depends(get_db)):
     # Verify Database Connection
     db_status = "healthy"
     try:
-        # MongoDB ping command to check connectivity
-        db.command("ping")
+        from sqlalchemy import text
+        await db.execute(text("SELECT 1"))
     except Exception as e:
         db_status = f"unhealthy: {str(e)}"
         

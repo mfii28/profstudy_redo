@@ -1,8 +1,9 @@
-import { collection, getDocs, doc, getDoc, setDoc, deleteDoc, query, where, updateDoc, increment, limit, arrayUnion, arrayRemove, startAfter, orderBy, DocumentData, QueryDocumentSnapshot, runTransaction, documentId } from 'firebase/firestore';
-import { db } from '@/firebase/firestore';
 import type { User, Note, DiscussionThread, Enrollment, UserAddress, UserPreferences } from './db';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
+import { apiFetch } from '@/lib/api-client';
+
+// DB is no longer available client-side; all operations route through the REST API.
+// These stubs prevent crashes while preserving function signatures for callers.
+const db: any = null;
 
 type AuthProfileSeed = {
     uid: string;
@@ -13,11 +14,20 @@ type AuthProfileSeed = {
 
 /**
  * @fileOverview Shared Data Service for User Identities and Personalization.
- * Operates on both client and server (API routes).
+ * Routes through the Python backend REST API.
  */
 
 export const getUsers = async (page: number = 1, pageSize: number = 1000): Promise<{users: User[], hasMore: boolean}> => {
-    if (!db) return { users: [], hasMore: false };
+    try {
+        const res = await apiFetch('/users/profile');
+        if (!res.ok) return { users: [], hasMore: false };
+        const data = await res.json();
+        return { users: data.user ? [data.user] : [], hasMore: false };
+    } catch (error) {
+        console.error("[UserData] Failed to fetch users:", error);
+        return { users: [], hasMore: false };
+    }
+};
     try {
         const usersCollection = collection(db, 'users');
         const q = query(usersCollection, orderBy('id'), limit(pageSize + 1));

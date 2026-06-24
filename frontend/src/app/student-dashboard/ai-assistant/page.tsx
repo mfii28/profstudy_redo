@@ -131,7 +131,8 @@ export default function AiStudyTutorPage() {
     }
     setCourseRagLoading(true);
     try {
-      const stats = await getCourseRagStatsForStudent(currentUser.uid, selectedCourseId);
+      const idToken = await currentUser.getIdToken(true);
+      const stats = await getCourseRagStatsForStudent(currentUser.uid, selectedCourseId, idToken);
       setCourseRagStats(stats);
     } catch {
       setCourseRagStats(null);
@@ -316,7 +317,8 @@ export default function AiStudyTutorPage() {
     setIsGeneratingCards(true);
     try {
       let retrievedContext: RetrievedChunk[] | undefined;
-      const chunks = await retrieveCourseChunksForStudent(currentUser.uid, selectedCourseId, topic, 10);
+      const idToken = await currentUser.getIdToken(true);
+      const chunks = await retrieveCourseChunksForStudent(currentUser.uid, selectedCourseId, topic, 10, idToken);
       if (chunks.length > 0) retrievedContext = chunks;
 
       const contentFallback =
@@ -358,7 +360,8 @@ export default function AiStudyTutorPage() {
     setExamShortDraft('');
     setExamShortResult(null);
     try {
-      const retrieved = await retrieveCourseChunksForStudent(currentUser.uid, selectedCourseId, topic, 12);
+      const idToken = await currentUser.getIdToken(true);
+      const retrieved = await retrieveCourseChunksForStudent(currentUser.uid, selectedCourseId, topic, 12, idToken);
       const syllabus = buildLessonOutline(selectedCourse);
       const out = await generateExamPractice({
         topic,

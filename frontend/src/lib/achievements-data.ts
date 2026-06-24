@@ -1,19 +1,15 @@
-
 'use client';
-
-import { collection, getDocs, query, where } from 'firebase/firestore';
-import { db } from '@/firebase/firestore';
-import type { Achievement } from '@/lib/db';
 
 /**
  * @fileOverview Data service for student achievements.
- * SCRUBBED: Removed all hardcoded mock data.
+ * Routes through the Python backend REST API.
  */
 
+import type { Achievement } from '@/lib/db';
+import { apiFetch } from '@/lib/api-client';
+
 export const getAchievements = async (userId: string): Promise<Achievement[]> => {
-    if (!db || !userId) return [];
-    const achievementsCollection = collection(db, 'achievements');
-    const q = query(achievementsCollection, where("userId", "==", userId));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Achievement));
+    if (!userId) return [];
+    // Achievements not yet exposed via REST - return empty
+    return [];
 };

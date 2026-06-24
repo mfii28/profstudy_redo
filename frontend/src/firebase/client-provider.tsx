@@ -1,16 +1,16 @@
 'use client';
 
 import React, { type ReactNode } from 'react';
-import { FirebaseProvider } from './provider';
+import { SupabaseProvider } from './provider';
 
-interface FirebaseClientProviderProps {
+interface SupabaseClientProviderProps {
   children: ReactNode;
 }
 
-export function FirebaseClientProvider({ children }: FirebaseClientProviderProps) {
+export function SupabaseClientProvider({ children }: SupabaseClientProviderProps) {
   return (
-    <FirebaseProvider>
+    <SupabaseProvider>
       {children}
-    </FirebaseProvider>
+    </SupabaseProvider>
   );
 }

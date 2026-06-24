@@ -1,8 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from app.core.database import get_db
 from app.core.config import settings
 from app.core.security import get_current_user
+from app.models.models import Course, TutorDetail, Order, User
 from app.api.v1.endpoints.rag import get_course_markdown_text
 import google.generativeai as genai
 import json
@@ -49,7 +52,7 @@ Your answer:"""
 async def ai_tutor_stream(
     payload: Dict[str, Any],
     current_user: Dict = Depends(get_current_user),
-    db = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Streams Gemini chat responses for the AI Tutor RAG flow.
@@ -69,21 +72,24 @@ async def ai_tutor_stream(
     role = current_user.get("role", "student")
     
     # 1. Verify course existence
-    course = db["Course"].find_one({"_id": course_id})
+    course_result = await db.execute(select(Course).where(Course.id == course_id))
+    course = course_result.scalar_one_or_none()
     if not course:
         raise HTTPException(status_code=404, detail="Course not found.")
         
     # 2. Verify enrollment or tutor/admin permissions
     is_staff = role in ['admin', 'superadmin', 'subadmin']
-    tutor = db["TutorDetail"].find_one({"userId": uid})
-    is_owner = tutor is not None and course.get("tutorId") == tutor.get("_id")
+    tutor_result = await db.execute(select(TutorDetail).where(TutorDetail.userId == uid))
+    tutor = tutor_result.scalar_one_or_none()
+    is_owner = tutor is not None and course.tutorId == tutor.id
     
     has_access = is_staff or is_owner
     if not has_access:
-        # Check student enrollment via order status
-        order = db["Order"].find_one({"userId": uid, "status": "completed"})
-        if order:
-            has_access = True
+        user_result = await db.execute(select(User).where(User.id == uid))
+        user = user_result.scalar_one_or_none()
+        if user:
+            enrollments = user.enrollments or []
+            has_access = any(e.get("courseId") == course_id for e in enrollments)
             
     if not has_access:
         raise HTTPException(status_code=403, detail="Permission denied.")
@@ -104,11 +110,9 @@ async def ai_tutor_stream(
     system_instruction = build_tutor_system_instruction(persona)
     user_content = build_tutor_user_content(question, materials_text, lesson_outline)
     
-    # Deriving source doc headers
     source_docs = ["Course materials (Combined)"] if materials_text else []
     meta_header = urllib.parse.quote(json.dumps(source_docs))
     
-    # Setup model streaming generator
     def generate():
         try:
             model = genai.GenerativeModel(

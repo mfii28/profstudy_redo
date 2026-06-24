@@ -1,6 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from app.core.database import get_db
 from app.core.security import get_current_user
+from app.models.models import User, Classroom, Course, TutorDetail, Order, BookPurchase
 from app.services.r2_service import r2_service
 import re
 import time
@@ -72,11 +75,12 @@ def sanitize_key(key: str) -> str:
     decoded = re.sub(r'[<>:"|?*\\]', '', decoded)
     return re.sub(r'\s+', '_', decoded)
 
-def verify_user_role(user_id: str, allowed_roles: List[str], db) -> bool:
-    user = db["User"].find_one({"_id": user_id})
-    return user is not None and user.get("role") in allowed_roles
+async def verify_user_role(user_id: str, allowed_roles: List[str], db: AsyncSession) -> bool:
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    return user is not None and user.role in allowed_roles
 
-def derive_secure_path(uid: str, upload_type: str, file_name: str, context_id: Optional[str], db) -> str:
+async def derive_secure_path(uid: str, upload_type: str, file_name: str, context_id: Optional[str], db: AsyncSession) -> str:
     clean_name = sanitize_key(file_name)
     timestamp = int(time.time() * 1000)
     
@@ -95,27 +99,27 @@ def derive_secure_path(uid: str, upload_type: str, file_name: str, context_id: O
             raise HTTPException(status_code=400, detail="Course context (contextId) is required.")
         return f"public/courses/{context_id}/thumbnail_{timestamp}_{clean_name}"
     elif upload_type == 'product':
-        if not verify_user_role(uid, ['admin', 'superadmin'], db):
+        if not await verify_user_role(uid, ['admin', 'superadmin'], db):
             raise HTTPException(status_code=403, detail="Unauthorized upload context.")
         return f"public/products/{timestamp}_{clean_name}"
     elif upload_type == 'branding':
-        if not verify_user_role(uid, ['superadmin'], db):
+        if not await verify_user_role(uid, ['superadmin'], db):
             raise HTTPException(status_code=403, detail="Unauthorized upload context.")
         return f"public/branding/{timestamp}_{clean_name}"
     elif upload_type == 'kyc':
         return f"private/tutors/{uid}/kyc/{timestamp}_{clean_name}"
     elif upload_type == 'book_cover':
-        if not verify_user_role(uid, ['admin', 'superadmin', 'subadmin'], db):
+        if not await verify_user_role(uid, ['admin', 'superadmin', 'subadmin'], db):
             raise HTTPException(status_code=403, detail="Unauthorized upload context.")
         return f"public/books/covers/{timestamp}_{clean_name}"
     elif upload_type == 'book_file':
-        if not verify_user_role(uid, ['admin', 'superadmin', 'subadmin'], db):
+        if not await verify_user_role(uid, ['admin', 'superadmin', 'subadmin'], db):
             raise HTTPException(status_code=403, detail="Unauthorized upload context.")
         if not context_id:
             raise HTTPException(status_code=400, detail="Book context (contextId) is required.")
         return f"private/books/{context_id}/content/{timestamp}_{clean_name}"
     elif upload_type == 'rich_content':
-        if not verify_user_role(uid, ['admin', 'superadmin', 'subadmin', 'tutor'], db):
+        if not await verify_user_role(uid, ['admin', 'superadmin', 'subadmin', 'tutor'], db):
             raise HTTPException(status_code=403, detail="Unauthorized upload context.")
         return f"public/rich-content/{timestamp}_{clean_name}"
     elif upload_type == 'classroom':
@@ -125,25 +129,24 @@ def derive_secure_path(uid: str, upload_type: str, file_name: str, context_id: O
     elif upload_type == 'course_rag':
         if not context_id:
             raise HTTPException(status_code=400, detail="Course context (contextId) is required.")
-        if not verify_user_role(uid, ['admin', 'superadmin', 'subadmin', 'tutor'], db):
+        if not await verify_user_role(uid, ['admin', 'superadmin', 'subadmin', 'tutor'], db):
             raise HTTPException(status_code=403, detail="Unauthorized upload context.")
         return f"private/courses/{context_id}/rag/uploads/{timestamp}_{clean_name}"
     else:
         raise HTTPException(status_code=400, detail="Invalid upload context type.")
 
 @router.get("/upload-url")
-def get_upload_url(
+async def get_upload_url(
     type: str = Query(...),
     fileName: str = Query(...),
     contentType: str = Query(...),
     contextId: Optional[str] = Query(None),
     lessonType: Optional[str] = Query(None),
     current_user: Dict = Depends(get_current_user),
-    db = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     uid = current_user["id"]
     
-    # Block spreadsheets
     ext = fileName.split('.')[-1].lower() if '.' in fileName else ''
     if ext in BLOCKED_EXTENSIONS and not (type == 'lesson' and lessonType == 'resource'):
         raise HTTPException(status_code=400, detail="Spreadsheet uploads (.xls/.xlsx) are not allowed.")
@@ -152,7 +155,6 @@ def get_upload_url(
     if not resolved_content_type or resolved_content_type == 'application/octet-stream':
         resolved_content_type = EXTENSION_MIME_MAP.get(ext, 'application/octet-stream')
         
-    # Verify allowed content types
     if type not in ALLOWED_CONTENT_TYPES:
         raise HTTPException(status_code=400, detail="Invalid upload context type.")
         
@@ -160,16 +162,14 @@ def get_upload_url(
     if not is_allowed:
         raise HTTPException(status_code=400, detail="This file type is not allowed for the selected context.")
         
-    # Verify allowed lesson content types
     if type == 'lesson' and lessonType:
         if lessonType == 'document' and resolved_content_type != 'application/pdf':
             raise HTTPException(status_code=400, detail="Document lessons only accept PDF files.")
         if lessonType == 'video' and not resolved_content_type.startswith('video/'):
             raise HTTPException(status_code=400, detail="Video lessons only accept video files.")
 
-    key = derive_secure_path(uid, type, fileName, contextId, db)
+    key = await derive_secure_path(uid, type, fileName, contextId, db)
     
-    # Request PUT url from R2 service
     url = r2_service.generate_upload_url(key)
     if not url:
         raise HTTPException(status_code=500, detail="Storage client initialization failed.")
@@ -181,19 +181,22 @@ def get_upload_url(
     }
 
 @router.get("/download-url")
-def get_download_url(
+async def get_download_url(
     key: str = Query(...),
     asAttachment: bool = Query(False),
     fileName: Optional[str] = Query(None),
     current_user: Dict = Depends(get_current_user),
-    db = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     uid = current_user["id"]
     clean_key = sanitize_key(key)
     
     # Check permissions for private objects
     if not clean_key.startswith("public/"):
-        is_admin = verify_user_role(uid, ["admin", "superadmin", "subadmin"], db)
+        user_result = await db.execute(select(User).where(User.id == uid))
+        user = user_result.scalar_one_or_none()
+        caller_role = user.role if user else "student"
+        is_admin = caller_role in ["admin", "superadmin", "subadmin"]
         has_access = is_admin
         
         if not has_access and clean_key.startswith(f"private/users/{uid}/"):
@@ -201,40 +204,42 @@ def get_download_url(
         if not has_access and clean_key.startswith(f"private/tutors/{uid}/"):
             has_access = True
             
-        # Classroom match checks
         if not has_access and clean_key.startswith("private/classrooms/"):
             classroom_id = clean_key.split('/')[2]
-            classroom = db["Classroom"].find_one({"_id": classroom_id})
+            classroom_result = await db.execute(select(Classroom).where(Classroom.id == classroom_id))
+            classroom = classroom_result.scalar_one_or_none()
             if classroom:
-                tutor_id = classroom.get("tutorId")
-                enrolled_students = classroom.get("enrolledStudentIds") or []
-                if tutor_id == uid or uid in enrolled_students:
+                enrolled = classroom.enrolledStudentIds or []
+                if classroom.tutorId == uid or uid in enrolled:
                     has_access = True
                     
-        # Course match checks
         if not has_access and clean_key.startswith("private/courses/"):
             course_id = clean_key.split('/')[2]
-            course = db["Course"].find_one({"_id": course_id})
+            course_result = await db.execute(select(Course).where(Course.id == course_id))
+            course = course_result.scalar_one_or_none()
             if course:
-                tutor = db["TutorDetail"].find_one({"userId": uid})
-                if tutor and course.get("tutorId") == tutor.get("_id"):
+                tutor_result = await db.execute(select(TutorDetail).where(TutorDetail.userId == uid))
+                tutor = tutor_result.scalar_one_or_none()
+                if tutor and course.tutorId == tutor.id:
                     has_access = True
-                else:
-                    order = db["Order"].find_one({"userId": uid, "status": "completed"})
-                    if order:
-                        has_access = True
+                elif user:
+                    enrollments = user.enrollments or []
+                    has_access = any(e.get("courseId") == course_id for e in enrollments)
 
-        # Book purchase checks
         if not has_access and clean_key.startswith("private/books/"):
             book_id = clean_key.split('/')[2]
-            purchase = db["BookPurchase"].find_one({"userId": uid, "bookId": book_id})
-            if purchase:
+            purchase_result = await db.execute(
+                select(BookPurchase).where(
+                    BookPurchase.userId == uid,
+                    BookPurchase.bookId == book_id,
+                )
+            )
+            if purchase_result.scalar_one_or_none():
                 has_access = True
                 
         if not has_access:
             raise HTTPException(status_code=403, detail="Permission denied.")
             
-    # Generate GET url
     url = r2_service.generate_download_url(clean_key)
     if not url:
         raise HTTPException(status_code=500, detail="Storage client initialization failed.")

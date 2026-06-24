@@ -100,7 +100,19 @@ export async function enrollFreeCourse(
   courseId: string
 ) {
   try {
-    const prisma = (await import('@/lib/prisma')).default;
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    const response = await fetch(`${API_URL}/api/v1/enrollments/enroll`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${idToken}`,
+      },
+      body: JSON.stringify({ courseId }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      return { success: false, message: data.detail || 'Enrollment failed.' };
+    }
     return { success: true, courseId };
   } catch (err: any) {
     return { success: false, message: err.message || 'Free enrollment failed.' };

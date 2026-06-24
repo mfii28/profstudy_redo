@@ -6,12 +6,19 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "StudyMate API"
     API_V1_STR: str = "/api/v1"
     
-    # Database Settings
-    DATABASE_URL: str = "postgresql+psycopg://postgres:postgres@localhost:5432/studymate"
+    # Database Settings (SQLAlchemy async)
+    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/studymate"
+
+    # Synchronous variant for Alembic / scripts that don't need async
+    SYNC_DATABASE_URL: str = "postgresql+psycopg://postgres:postgres@localhost:5432/studymate"
     
-    # Security Settings (for validating NextAuth JWT tokens)
+    # Security Settings (for verifying Supabase JWT tokens)
     JWT_SECRET_KEY: Optional[str] = None
     JWT_ALGORITHM: str = "HS256"
+    
+    # Supabase Service Role (for admin-auth operations)
+    SUPABASE_URL: Optional[str] = None
+    SUPABASE_SERVICE_ROLE_KEY: Optional[str] = None
     
     # Cloudflare R2 Settings
     R2_ACCOUNT_ID: Optional[str] = None

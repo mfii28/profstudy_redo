@@ -3,7 +3,11 @@
 import React, { createContext, useContext, ReactNode, useMemo, useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase-client';
 
-// Interfaces to mimic Firebase Auth structures
+/**
+ * Supabase Auth Provider.
+ * Replaces Firebase Auth with direct Supabase session management.
+ * Exposes a MockUser interface for backward compatibility with existing hooks.
+ */
 export interface MockUser {
   uid: string;
   id: string;
@@ -18,11 +22,8 @@ export interface MockUser {
   getIdTokenResult: () => Promise<{ claims: Record<string, any> }>;
 }
 
-export interface FirebaseContextState {
-  areServicesAvailable: boolean;
-  firebaseApp: any | null;
-  firestore: any | null;
-  auth: any | null;
+export interface SupabaseContextState {
+  supabase: typeof supabase;
   user: MockUser | null;
   isUserLoading: boolean;
   isLoading: boolean;
@@ -38,7 +39,7 @@ export interface UserHookResult {
   logout: () => Promise<void>;
 }
 
-export const FirebaseContext = createContext<FirebaseContextState | undefined>(undefined);
+export const SupabaseContext = createContext<SupabaseContextState | undefined>(undefined);
 
 function mapSupabaseUser(supabaseUser: any): MockUser {
   const role = supabaseUser.user_metadata?.role || 'student';
@@ -70,7 +71,7 @@ function mapSupabaseUser(supabaseUser: any): MockUser {
   };
 }
 
-export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+export const SupabaseProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<MockUser | null>(null);
   const [isUserLoading, setIsUserLoading] = useState(true);
 
@@ -95,7 +96,6 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({ children }
     // 2. Listen to auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
-        // Set cookie so backend can check it if needed
         const secure = window.location.protocol === 'https:' ? 'Secure;' : '';
         const role = session.user.user_metadata?.role || 'student';
         const emailVerified = !!session.user.email_confirmed_at;
@@ -114,15 +114,9 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({ children }
     };
   }, []);
 
-  const contextValue = useMemo((): FirebaseContextState => {
+  const contextValue = useMemo((): SupabaseContextState => {
     return {
-      areServicesAvailable: true,
-      firebaseApp: {},
-      firestore: {},
-      auth: {
-        signOut: logout,
-        currentUser: user,
-      },
+      supabase,
       user,
       isUserLoading,
       isLoading: isUserLoading,
@@ -132,20 +126,17 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({ children }
   }, [user, isUserLoading, logout]);
 
   return (
-    <FirebaseContext.Provider value={contextValue}>
+    <SupabaseContext.Provider value={contextValue}>
       {children}
-    </FirebaseContext.Provider>
+    </SupabaseContext.Provider>
   );
 };
 
-export const useFirebase = (): FirebaseContextState => {
-  const context = useContext(FirebaseContext);
+export const useSupabase = (): SupabaseContextState => {
+  const context = useContext(SupabaseContext);
   if (context === undefined) {
     return {
-      areServicesAvailable: true,
-      firebaseApp: {},
-      firestore: {},
-      auth: {},
+      supabase,
       user: null,
       isUserLoading: false,
       isLoading: false,
@@ -157,16 +148,22 @@ export const useFirebase = (): FirebaseContextState => {
 };
 
 export const useAuth = (): any => {
-  const { auth } = useFirebase();
-  return auth;
+  const { supabase } = useSupabase();
+  return supabase.auth;
 };
 
+/**
+ * @deprecated Use `supabase` directly from @/lib/supabase-client instead.
+ */
 export const useFirestore = (): any => {
   return {};
 };
 
+/**
+ * @deprecated Supabase is used directly. This returns null.
+ */
 export const useFirebaseApp = (): any => {
-  return {};
+  return null;
 };
 
 export function useMemoFirebase<T>(factory: () => T, deps: React.DependencyList): T {
@@ -174,6 +171,6 @@ export function useMemoFirebase<T>(factory: () => T, deps: React.DependencyList)
 }
 
 export const useUser = (): UserHookResult => {
-  const { user, isUserLoading, isLoading, userError, logout } = useFirebase();
+  const { user, isUserLoading, isLoading, userError, logout } = useSupabase();
   return { user, isUserLoading, isLoading, userError, logout };
 };
