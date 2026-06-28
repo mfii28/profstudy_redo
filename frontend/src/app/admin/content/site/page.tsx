@@ -153,10 +153,10 @@ export default function SiteContentPage() {
                     <div className="space-y-1">
                       <Label className="text-xs">Number</Label>
                       <Input
-                        value={f.number}
+                        value={f.number ?? ''}
                         onChange={e =>
                           setFeatures(prev =>
-                            prev.map((item, idx) => idx === i ? { ...item, number: e.target.value } : item),
+                            prev.map((item, idx) => idx === i ? { ...item, number: Number(e.target.value) || undefined } : item),
                           )
                         }
                         placeholder="01"
@@ -223,7 +223,7 @@ export default function SiteContentPage() {
                   setFeatures(prev => [
                     ...prev,
                     {
-                      number: String(prev.length + 1).padStart(2, '0'),
+                      number: prev.length + 1,
                       iconKey: 'BookOpen',
                       title: 'New Feature',
                       description: '',
@@ -322,7 +322,7 @@ export default function SiteContentPage() {
                 onClick={() =>
                   setQualificationPath(prev => [
                     ...prev,
-                    { code: 'NEW', name: 'New Level', subtitle: '', available: false },
+                    { code: 'NEW', name: 'New Level', subtitle: '', available: false, title: 'New Level', description: '', icon: 'BookOpen', steps: [] },
                   ])
                 }
               >
@@ -380,10 +380,10 @@ export default function SiteContentPage() {
                     <div className="space-y-1">
                       <Label className="text-xs">Number</Label>
                       <Input
-                        value={p.number}
+                        value={p.number ?? ''}
                         onChange={e =>
                           setPillars(prev =>
-                            prev.map((item, idx) => idx === i ? { ...item, number: e.target.value } : item),
+                            prev.map((item, idx) => idx === i ? { ...item, number: Number(e.target.value) || undefined } : item),
                           )
                         }
                         placeholder="01"
@@ -450,10 +450,11 @@ export default function SiteContentPage() {
                   setPillars(prev => [
                     ...prev,
                     {
-                      number: String(prev.length + 1).padStart(2, '0'),
+                      number: prev.length + 1,
                       iconKey: 'Users',
                       title: 'New Pillar',
                       body: '',
+                      description: '',
                     },
                   ])
                 }
@@ -547,7 +548,7 @@ export default function SiteContentPage() {
                 onClick={() =>
                   setValues(prev => [
                     ...prev,
-                    { iconKey: 'Target', label: 'New Value', desc: '' },
+                    { iconKey: 'Target', label: 'New Value', desc: '', title: 'New Value', description: '' },
                   ])
                 }
               >

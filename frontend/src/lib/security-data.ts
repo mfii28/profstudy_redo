@@ -1,39 +1,28 @@
 'use client';
 
-import { collection, getDocs, doc, setDoc, deleteDoc, query, orderBy, limit } from 'firebase/firestore';
-import { db } from '@/firebase/firestore';
+import { apiFetch } from '@/lib/api-client';
 import type { IpBlock } from './db';
 
 /**
- * @fileOverview Data service for IP restrictions and Firewall rules.
+ * @fileOverview Data service for IP blocklist management.
+ * Routes through the Python backend REST API.
  */
 
-const COLLECTION_NAME = 'ip_blocklist';
-
 export const getIpBlocklist = async (): Promise<IpBlock[]> => {
-    if (!db) return [];
     try {
-        const q = query(collection(db, COLLECTION_NAME), orderBy('timestamp', 'desc'), limit(100));
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as IpBlock));
-    } catch (error) {
-        console.error('[SecurityData] Failed to fetch IP blocklist:', error);
-        return [];
-    }
+        const res = await apiFetch('/admin/ip-blocklist');
+        if (!res.ok) return [];
+        return (await res.json()).blocks || [];
+    } catch { return []; }
 };
 
 export const blockIp = async (ip: string, reason: string, adminId: string): Promise<void> => {
-    if (!db) return;
-    const id = `block-${Date.now()}`;
-    await setDoc(doc(db, COLLECTION_NAME, id), {
-        ip,
-        reason,
-        blockedBy: adminId,
-        timestamp: new Date().toISOString()
+    await apiFetch('/admin/ip-blocklist', {
+        method: 'POST',
+        body: JSON.stringify({ ip, reason, adminId }),
     });
 };
 
 export const unblockIp = async (id: string): Promise<void> => {
-    if (!db) return;
-    await deleteDoc(doc(db, COLLECTION_NAME, id));
+    await apiFetch(`/admin/ip-blocklist/${id}`, { method: 'DELETE' });
 };

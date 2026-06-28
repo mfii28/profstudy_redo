@@ -1,46 +1,38 @@
-import {
-    collection,
-    addDoc,
-    getDocs,
-    query,
-    where,
-    orderBy,
-    doc,
-    updateDoc,
-} from 'firebase/firestore';
-import { db } from '@/firebase/firestore';
+import { apiFetch } from '@/lib/api-client';
 import type { PayoutRequest, PayoutRequestStatus } from '@/lib/db';
-
-const COLLECTION = 'payoutRequests';
 
 export async function submitPayoutRequest(
     data: Omit<PayoutRequest, 'id' | 'status' | 'submittedAt'>
 ): Promise<string> {
-    if (!db) throw new Error('Firestore not initialized');
-    const docRef = await addDoc(collection(db, COLLECTION), {
-        ...data,
-        status: 'pending' as PayoutRequestStatus,
-        submittedAt: new Date().toISOString(),
+    const res = await apiFetch('/admin/payouts', {
+        method: 'POST',
+        body: JSON.stringify(data),
     });
-    return docRef.id;
+    if (!res.ok) throw new Error('Failed to submit payout request');
+    const result = await res.json();
+    return result.id;
 }
 
 export async function getPayoutRequestsByTutor(tutorId: string): Promise<PayoutRequest[]> {
-    if (!db) return [];
-    const q = query(
-        collection(db, COLLECTION),
-        where('tutorId', '==', tutorId),
-        orderBy('submittedAt', 'desc')
-    );
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest));
+    try {
+        const res = await apiFetch(`/admin/payouts?tutorId=${encodeURIComponent(tutorId)}`);
+        if (!res.ok) return [];
+        const data = await res.json();
+        return data.requests || [];
+    } catch {
+        return [];
+    }
 }
 
 export async function getAllPayoutRequests(): Promise<PayoutRequest[]> {
-    if (!db) return [];
-    const q = query(collection(db, COLLECTION), orderBy('submittedAt', 'desc'));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest));
+    try {
+        const res = await apiFetch('/admin/payouts');
+        if (!res.ok) return [];
+        const data = await res.json();
+        return data.requests || [];
+    } catch {
+        return [];
+    }
 }
 
 export async function updatePayoutRequestStatus(
@@ -48,11 +40,9 @@ export async function updatePayoutRequestStatus(
     status: PayoutRequestStatus,
     adminNote?: string
 ): Promise<void> {
-    if (!db) throw new Error('Firestore not initialized');
-    const docRef = doc(db, COLLECTION, requestId);
-    await updateDoc(docRef, {
-        status,
-        reviewedAt: new Date().toISOString(),
-        ...(adminNote ? { adminNote } : {}),
+    const res = await apiFetch(`/admin/payouts/${requestId}/status`, {
+        method: 'PUT',
+        body: JSON.stringify({ status, adminNote }),
     });
+    if (!res.ok) throw new Error('Failed to update payout request status');
 }

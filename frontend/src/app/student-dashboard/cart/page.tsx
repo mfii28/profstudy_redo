@@ -2,30 +2,30 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useUser, useFirestore } from '@/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { useUser } from '@/firebase';
 import { CartPanelContent } from '@/components/cart/cart-panel-content';
 import { Loader2 } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
 
 const ADMIN_ROLES = ['admin', 'superadmin', 'subadmin'] as const;
 
 export default function CartPage() {
   const router = useRouter();
   const { user, isLoading: isUserLoading } = useUser();
-  const firestore = useFirestore();
   const [isChecking, setIsChecking] = useState(true);
   const [isAllowed, setIsAllowed] = useState(false);
 
   useEffect(() => {
     if (isUserLoading) return;
-    if (!user || !firestore) {
+    if (!user) {
       setIsChecking(false);
       setIsAllowed(true);
       return;
     }
-    getDoc(doc(firestore, 'users', user.uid))
-      .then((snap) => {
-        const role = snap.data()?.role as string | undefined;
+    apiFetch('/users/profile')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        const role = data?.user?.role as string | undefined;
         if (role && (ADMIN_ROLES as readonly string[]).includes(role)) {
           router.replace('/admin');
         } else {
@@ -34,7 +34,7 @@ export default function CartPage() {
       })
       .catch(() => setIsAllowed(true))
       .finally(() => setIsChecking(false));
-  }, [user, firestore, isUserLoading, router]);
+  }, [user, isUserLoading, router]);
 
   if (isChecking || isUserLoading) {
     return (

@@ -394,3 +394,17 @@ class DiscussionMessage(Base):
     updatedAt: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     thread = relationship("DiscussionThread", back_populates="messages")
+
+
+class Coupon(Base):
+    __tablename__ = "Coupon"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    code: Mapped[str] = mapped_column(String, unique=True)
+    discountPct: Mapped[int] = mapped_column(Integer)
+    maxUses: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    usedCount: Mapped[int] = mapped_column(Integer, default=0)
+    courseId: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    expiresAt: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    createdAt: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updatedAt: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

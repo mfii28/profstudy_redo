@@ -2,16 +2,6 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useUser } from '@/firebase';
-import { db } from '@/firebase/firestore';
-import {
-  collection,
-  query,
-  where,
-  orderBy,
-  limit,
-  onSnapshot,
-  Timestamp,
-} from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -871,147 +861,66 @@ export function ClassroomRoom({ courseId, backHref, roomHref, initialChannel }: 
   }, [user, isAuthLoading, courseId, toast]);
 
   useEffect(() => {
-    if (!db || !user || !classroom?.id || !isClassroomAccessActive) return;
+    if (!user || !classroom?.id || !isClassroomAccessActive) return;
 
-    const classroomMessageKeys = Array.from(
-      new Set(
-        [classroom.id, classroom.courseId]
-          .filter((value): value is string => typeof value === 'string' && value.length > 0)
-      )
-    );
-
-    console.info('[ClassroomMessageStream] Initializing subscription', {
+    console.info('[ClassroomMessageStream] Initializing polling', {
       classroomId: classroom.id,
       courseId,
       channel: activeChannel,
       uid: user.uid,
-      keys: classroomMessageKeys,
     });
 
     setIsLoadingMessages(true);
     setHistoricMessages([]);
     setHasOlderMessages(true);
+    let cancelled = false;
 
-    let unsubscribed = false;
-    let retried = false;
-    const snapshotByKey = new Map<string, ClassroomMessage[]>();
-    let activeUnsubs: Array<() => void> = [];
-
-    const applyMergedSnapshots = () => {
-      const merged = new Map<string, ClassroomMessage>();
-      snapshotByKey.forEach((entries) => {
-        entries.forEach((entry) => {
-          merged.set(entry.id, entry);
-        });
-      });
-
-      const msgs = Array.from(merged.values()).sort(
-        (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-      );
-
-      setMessages(msgs);
-      setMessageCount(msgs.length);
-      setIsLoadingMessages(false);
-      if (msgs.length < 200) setHasOlderMessages(false);
-    };
-
-    const clearSubscriptions = () => {
-      activeUnsubs.forEach((unsub) => unsub());
-      activeUnsubs = [];
-    };
-
-    const subscribe = () => {
-      clearSubscriptions();
-
-      classroomMessageKeys.forEach((messageKey) => {
-        const q = query(
-          collection(db, 'classroomMessages'),
-          where('classroomId', '==', messageKey),
-          where('channel', '==', activeChannel),
-          orderBy('timestamp', 'desc'),
-          limit(200)
+    const pollMessages = async () => {
+      if (!user || cancelled) return;
+      try {
+        const idToken = await user.getIdToken();
+        const classroomMessageKeys = Array.from(
+          new Set(
+            [classroom.id, classroom.courseId]
+              .filter((value): value is string => typeof value === 'string' && value.length > 0)
+          )
         );
 
-        const unsub = onSnapshot(q, (snap) => {
-          if (unsubscribed) return;
-          console.info('[ClassroomMessageStream] Snapshot received', {
-            classroomId: classroom.id,
-            messageKey,
-            channel: activeChannel,
-            count: snap.size,
-          });
-
-          const msgs: ClassroomMessage[] = snap.docs.map((doc) => {
-            const d = doc.data() as any;
-            const timestamp = d.timestamp instanceof Timestamp
-              ? d.timestamp.toDate().toISOString()
-              : (d.timestamp || new Date().toISOString());
-            return { ...d, id: doc.id, timestamp };
-          }).reverse();
-
-          snapshotByKey.set(messageKey, msgs);
-          applyMergedSnapshots();
-        }, async (error) => {
-        if (unsubscribed) return;
-
-        console.error('[ClassroomMessageStream] Listener error', {
-          classroomId: classroom.id,
-          messageKey,
-          courseId,
-          channel: activeChannel,
-          uid: user.uid,
-          code: (error as any)?.code,
-          message: (error as any)?.message,
-        });
-
-        const isPermDenied = (error?.message || '').toLowerCase().includes('permission') ||
-          (error?.message || '').toLowerCase().includes('missing or insufficient');
-
-        // On first permission-denied, force-refresh the auth token so Firestore
-        // re-evaluates the security rules with the latest user state, then retry once.
-        if (isPermDenied && !retried && user) {
-          retried = true;
-          try {
-            // Force-refresh the auth token, then attempt a server-side repair
-            // that ensures the student's UID is in classrooms.enrolledStudentIds
-            // (the field the Firestore security rule checks).
-            const idToken = await user.getIdToken(/* forceRefresh */ true);
-            const repaired = await repairMyClassroomAccess(idToken, courseId);
-            if (!repaired.ok) {
-              throw new Error(repaired.error || 'Classroom access not active yet.');
-            }
-            snapshotByKey.clear();
-            subscribe();
-          } catch {
-            setIsLoadingMessages(false);
-            toast({
-              variant: 'destructive',
-              title: 'Message stream unavailable',
-              description: normalizeClassroomError(error?.message),
-            });
-          }
-          return;
+        const merged = new Map<string, ClassroomMessage>();
+        for (const messageKey of classroomMessageKeys) {
+          const result = await getOlderClassroomMessages(idToken, messageKey, activeChannel, new Date().toISOString(), 200);
+          if (cancelled) return;
+          const entries: ClassroomMessage[] = (result.messages || []).map((m: any) => ({
+            ...m,
+            id: m.id,
+            timestamp: m.timestamp || new Date().toISOString(),
+          }));
+          entries.forEach((entry) => merged.set(entry.id, entry));
         }
 
-        setIsLoadingMessages(false);
-        toast({
-          variant: 'destructive',
-          title: 'Message stream unavailable',
-          description: normalizeClassroomError(error?.message),
-        });
-        });
+        const msgs = Array.from(merged.values()).sort(
+          (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+        );
 
-        activeUnsubs.push(unsub);
-      });
+        setMessages(msgs);
+        setMessageCount(msgs.length);
+        setIsLoadingMessages(false);
+        if (msgs.length < 200) setHasOlderMessages(false);
+      } catch {
+        if (!cancelled) setIsLoadingMessages(false);
+      }
     };
 
-    subscribe();
+    pollMessages();
+
+    // Poll every 10 seconds for new messages
+    const interval = setInterval(pollMessages, 10000);
 
     return () => {
-      unsubscribed = true;
-      clearSubscriptions();
+      cancelled = true;
+      clearInterval(interval);
     };
-  }, [classroom?.id, classroom?.courseId, activeChannel, toast, user, courseId, isClassroomAccessActive]);
+  }, [classroom?.id, classroom?.courseId, activeChannel, user, courseId, isClassroomAccessActive]);
 
   // Presence heartbeat: update user status every 30 seconds
   useEffect(() => {
@@ -1044,53 +953,64 @@ export function ClassroomRoom({ courseId, backHref, roomHref, initialChannel }: 
   }, [user, classroom?.id, isClassroomAccessActive]);
 
   useEffect(() => {
-    if (!db) return;
+    if (!user) return;
 
-    const q = query(
-      collection(db, 'liveClasses'),
-      where('courseId', '==', courseId),
-      where('status', 'in', ['upcoming', 'live']),
-      orderBy('startTime', 'asc')
-    );
-
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const rows = snap.docs.map((d) => ({ ...d.data(), id: d.id } as LiveClass));
-        const now = Date.now();
-        setActiveLiveClasses(rows.filter((c) => resolveLiveSessionUiStatus(c, now) !== 'ended'));
-      },
-      (error) => {
-        console.warn('[ClassroomRoom] Live classes stream error:', error?.message);
-      }
-    );
-
-    return () => unsub();
-  }, [courseId]);
-
-  // Phase 3: Presence subscription for profile cards
-  useEffect(() => {
-    if (!db || !classroom?.id || !isClassroomAccessActive) return;
-    const q = query(collection(db, 'classroomPresence'), where('classroomId', '==', classroom.id));
-    const unsub = onSnapshot(q, (snap) => {
-      const map = new Map<string, 'online' | 'away' | 'dnd' | 'offline'>();
-      snap.docs.forEach((doc) => {
-        const data = doc.data();
-        if (data.userId) map.set(data.userId, data.status ?? 'offline');
-      });
-      setPresenceMap(map);
-    }, async (error) => {
-      if (!user) return;
-      if (!isTransientClassroomAccessError(error?.message)) return;
+    let cancelled = false;
+    const fetchLiveClasses = async () => {
       try {
-        const idToken = await user.getIdToken(true);
-        await repairMyClassroomAccess(idToken, courseId);
-      } catch {
-        // non-critical stream
+        const idToken = await user.getIdToken();
+        const res = await fetch(`/api/v1/live-classes/${courseId}`, {
+          headers: { Authorization: `Bearer ${idToken}` },
+        });
+        if (cancelled) return;
+        if (res.ok) {
+          const data = await res.json();
+          const rows: LiveClass[] = Array.isArray(data) ? data : (data.classes || []);
+          const now = Date.now();
+          setActiveLiveClasses(rows.filter((c) => resolveLiveSessionUiStatus(c, now) !== 'ended'));
+        }
+      } catch (error: any) {
+        console.warn('[ClassroomRoom] Live classes fetch error:', error?.message);
       }
-    });
-    return () => unsub();
-  }, [classroom?.id, courseId, isClassroomAccessActive, user]);
+    };
+
+    fetchLiveClasses();
+    const interval = setInterval(fetchLiveClasses, 30000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [courseId, user]);
+
+  // Phase 3: Presence polling for profile cards
+  useEffect(() => {
+    if (!classroom?.id || !isClassroomAccessActive || !user) return;
+
+    let cancelled = false;
+    const fetchPresence = async () => {
+      try {
+        const idToken = await user.getIdToken();
+        const members = await getClassroomMembers(idToken, classroom.id);
+        if (cancelled || !members.members) return;
+        const map = new Map<string, 'online' | 'away' | 'dnd' | 'offline'>();
+        members.members.forEach((m: any) => {
+          if (m.id) map.set(m.id, m.status ?? 'offline');
+        });
+        setPresenceMap(map);
+      } catch {
+        // non-critical
+      }
+    };
+
+    fetchPresence();
+    const interval = setInterval(fetchPresence, 30000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [classroom?.id, isClassroomAccessActive, user]);
 
   const handleCreateLiveSession = async () => {
     if (!user || !newLiveSession.title) return;

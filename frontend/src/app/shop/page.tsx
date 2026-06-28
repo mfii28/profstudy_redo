@@ -16,29 +16,29 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { BookOpen, Search } from 'lucide-react';
 import { resolveMediaUrl } from '@/lib/media-url';
-import { useUser, useFirestore } from '@/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { useUser } from '@/firebase';
 import { getBooks } from '@/lib/book-data';
+import { apiFetch } from '@/lib/api-client';
 
 export default function ShopPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [products, setProducts] = useState<Product[]>([]);
   const [books, setBooks] = useState<Book[]>([]);
   const { user } = useUser();
-  const firestore = useFirestore();
   const [isAdminRole, setIsAdminRole] = useState(false);
 
   useEffect(() => {
-    if (!user || !firestore) return;
-    getDoc(doc(firestore, 'users', user.uid))
-      .then((snap) => {
-        if (snap.exists()) {
-          const role = snap.data()?.role as string | undefined;
+    if (!user) return;
+    apiFetch('/users/profile')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data?.user) {
+          const role = data.user.role as string | undefined;
           setIsAdminRole(role === 'admin' || role === 'superadmin' || role === 'subadmin');
         }
       })
       .catch(() => {});
-  }, [user, firestore]);
+  }, [user]);
   const [bookSearch, setBookSearch] = useState('');
   const [bookType, setBookType] = useState<'all' | 'digital' | 'physical'>('all');
 

@@ -3,8 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { useFirestore, useUser } from '@/firebase';
+import { useUser } from '@/firebase';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -13,11 +12,11 @@ import { useToast } from '@/hooks/use-toast';
 import { CheckCheck, Copy, Gift, History, Link2, Loader2, Percent, Users } from 'lucide-react';
 import type { User } from '@/lib/db';
 import { DEFAULT_REFERRAL_REWARD_PERCENT, MAX_AFFILIATE_DISCOUNT_PERCENT } from '@/lib/affiliate-discount';
+import { apiFetch } from '@/lib/api-client';
 
 export default function AffiliateDashboardPage() {
   const router = useRouter();
   const { user, isLoading: authLoading } = useUser();
-  const firestore = useFirestore();
   const { toast } = useToast();
   const [profile, setProfile] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -29,32 +28,30 @@ export default function AffiliateDashboardPage() {
       router.replace('/login?redirect=/affiliate');
       return;
     }
-    if (!firestore) {
-      setLoading(false);
-      return;
-    }
-    const ref = doc(firestore, 'users', user.uid);
-    const unsub = onSnapshot(
-      ref,
-      (snap) => {
-        if (!snap.exists()) {
-          setProfile(null);
-          setLoading(false);
-          return;
-        }
-        const data = { id: snap.id, ...snap.data() } as User;
-        setProfile(data);
-        if (data.role !== 'student') {
-          const dest = data.role === 'tutor' ? '/tutor-dashboard' : '/admin';
-          router.replace(dest);
-          return;
-        }
+    fetchProfile();
+  }, [user, authLoading, router]);
+
+  const fetchProfile = async () => {
+    try {
+      const res = await apiFetch('/users/profile');
+      if (!res.ok) {
         setLoading(false);
-      },
-      () => setLoading(false)
-    );
-    return () => unsub();
-  }, [user, authLoading, firestore, router]);
+        return;
+      }
+      const data = await res.json();
+      const userData = data.user as User;
+      setProfile(userData);
+      if (userData.role !== 'student') {
+        const dest = userData.role === 'tutor' ? '/tutor-dashboard' : '/admin';
+        router.replace(dest);
+        return;
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const rewards = profile?.affiliateDiscountRewards;
   const history = useMemo(() => [...(rewards?.history || [])].reverse(), [rewards?.history]);

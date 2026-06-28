@@ -1,21 +1,23 @@
 
 'use client';
 
-import { collection, getDocs, query, orderBy, where } from 'firebase/firestore';
-import { db } from '@/firebase/firestore';
+import { apiFetch } from '@/lib/api-client';
 import type { Course, Review } from '@/lib/db';
 
 /**
  * @fileOverview Data service for course reviews.
- * SCRUBBED: Removed all hardcoded mock data.
+ * Routes through the Python backend REST API.
  */
 
 export const getReviews = async (): Promise<Review[]> => {
-    if (!db) return [];
-    const reviewsCollection = collection(db, 'reviews');
-    const q = query(reviewsCollection, orderBy("date", "desc"));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Review));
+    try {
+        const res = await apiFetch('/reviews');
+        if (!res.ok) return [];
+        const data = await res.json();
+        return data.reviews || [];
+    } catch {
+        return [];
+    }
 };
 
 const sortReviewsByDate = (reviews: Review[]) => {
@@ -33,7 +35,7 @@ const getUniqueCourseReviewTokens = (courses: Array<Pick<Course, 'id' | 'title'>
 };
 
 const getReviewsByCourseTokens = async (courseTokens: string[]): Promise<Review[]> => {
-    if (!db || courseTokens.length === 0) return [];
+    if (courseTokens.length === 0) return [];
 
     const chunks: string[][] = [];
 
@@ -44,32 +46,21 @@ const getReviewsByCourseTokens = async (courseTokens: string[]): Promise<Review[
     try {
         const snapshots = await Promise.all(
             chunks.map(async (courseChunk) => {
-                const reviewsCollection = collection(db, 'reviews');
-
                 try {
-                    const orderedQuery = query(
-                        reviewsCollection,
-                        where('course', 'in', courseChunk),
-                        orderBy('date', 'desc')
-                    );
-                    return await getDocs(orderedQuery);
-                } catch (error: any) {
-                    if (error?.code !== 'failed-precondition') {
-                        throw error;
-                    }
-
-                    const fallbackQuery = query(reviewsCollection, where('course', 'in', courseChunk));
-                    return getDocs(fallbackQuery);
+                    const res = await apiFetch('/reviews/course/' + encodeURIComponent(courseChunk[0]));
+                    if (!res.ok) return [];
+                    const data = await res.json();
+                    return data.reviews || [];
+                } catch {
+                    return [];
                 }
             })
         );
 
         const reviewMap = new Map<string, Review>();
 
-        snapshots.forEach((snapshot) => {
-            snapshot.docs.forEach((reviewDoc) => {
-                reviewMap.set(reviewDoc.id, { id: reviewDoc.id, ...reviewDoc.data() } as Review);
-            });
+        snapshots.flat().forEach((review: Review) => {
+            if (review.id) reviewMap.set(review.id, review);
         });
 
         return sortReviewsByDate(Array.from(reviewMap.values()));
@@ -80,17 +71,12 @@ const getReviewsByCourseTokens = async (courseTokens: string[]): Promise<Review[
 };
 
 export const getReviewsByUser = async (userId: string): Promise<Review[]> => {
-    if (!db || !userId) return [];
-
+    if (!userId) return [];
     try {
-        const reviewsCollection = collection(db, 'reviews');
-        const q = query(
-            reviewsCollection,
-            where('userId', '==', userId),
-            orderBy('date', 'desc')
-        );
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Review));
+        const res = await apiFetch(`/reviews?userId=${encodeURIComponent(userId)}`);
+        if (!res.ok) return [];
+        const data = await res.json();
+        return data.reviews || [];
     } catch (error) {
         console.error('[ReviewData] Failed to fetch reviews for user:', error);
         return [];

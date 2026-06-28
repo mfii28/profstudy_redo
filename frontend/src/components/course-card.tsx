@@ -15,35 +15,56 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Star, Users, Heart, PlayCircle, CheckCircle2 } from 'lucide-react';
-import { useUser, useFirestore } from '@/firebase';
+import { useUser } from '@/firebase';
 import { toggleWishlist } from '@/lib/user-data';
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { apiFetch } from '@/lib/api-client';
 import { ImageWithFallback } from '@/components/image-with-fallback';
 import { resolveMediaUrl } from '@/lib/media-url';
 
 export function CourseCard({ course }: { course: Course }) {
   const { user } = useUser();
-  const firestore = useFirestore();
   const { toast } = useToast();
   
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [isEnrolled, setIsEnrolled] = useState(false);
+  const [enrolledDate, setEnrolledDate] = useState<string | null>(null);
+  const [completedLessons, setCompletedLessons] = useState<string[]>([]);
 
   useEffect(() => {
-    if (user && firestore) {
-        const unsubscribe = onSnapshot(doc(firestore, 'users', user.uid), (snap) => {
-            if (snap.exists()) {
-                const profile = snap.data() as AppUser;
-                setIsEnrolled(profile.enrollments?.some(e => e.courseId === course.id) || false);
-                setIsWishlisted(profile.wishlistCourseIds?.includes(course.id) || false);
-            }
-        });
-        return () => unsubscribe();
-    }
-  }, [user, firestore, course.id]);
+    if (!user) return;
+    const loadProfile = async () => {
+      try {
+        const res = await apiFetch('/users/profile');
+        if (!res.ok) return;
+        const data = await res.json();
+        const profile = data.user;
+        if (profile) {
+          const enrollments = profile.enrollments || [];
+          const enrollment = enrollments.find((e: any) => e.courseId === course.id);
+          if (enrollment) {
+            setIsEnrolled(true);
+            setEnrolledDate(enrollment.enrolledDate || null);
+            setCompletedLessons(enrollment.completedLessons || []);
+          }
+          setIsWishlisted(profile.wishlistCourseIds?.includes(course.id) || false);
+        }
+      } catch (e) {
+        console.error('[CourseCard] Failed to load profile:', e);
+      }
+    };
+    loadProfile();
+  }, [user, course.id]);
+
+  // Calculate progress
+  const totalLessons = course.sections?.reduce(
+    (sum, sec) => sum + (sec.lessons?.length || 0), 0
+  ) || 0;
+  const progress = totalLessons > 0
+    ? Math.round((completedLessons.length / totalLessons) * 100)
+    : 0;
 
   const formatCount = (count?: number) => {
     if (count === undefined || count === null) return '0';
@@ -119,6 +140,21 @@ export function CourseCard({ course }: { course: Course }) {
                     ({formatCount(course.reviewsCount)} Reviews)
                 </span>
             </div>
+
+            {isEnrolled && totalLessons > 0 && (
+              <div className="mb-4">
+                <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                  <span className="font-medium">Progress</span>
+                  <span className="font-bold">{completedLessons.length}/{totalLessons}</span>
+                </div>
+                <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-primary transition-all duration-500"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+              </div>
+            )}
 
             <div className="flex items-center gap-4 text-xs text-muted-foreground border-t pt-4">
                 <div className="flex items-center gap-1.5 font-medium">

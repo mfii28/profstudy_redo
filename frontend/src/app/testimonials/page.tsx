@@ -23,10 +23,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getTestimonials, TESTIMONIAL_GROUPS, type TestimonialDocument } from '@/lib/testimonial-data';
 import type { TestimonialGroup } from '@/lib/db';
 import { resolveAvatarUrl } from '@/lib/media-url';
-import { useUser, useFirestore } from '@/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { useUser } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { submitUserTestimonial } from '@/app/actions/testimonials';
+import { apiFetch } from '@/lib/api-client';
 
 function groupLabel(group?: TestimonialGroup): string {
   return TESTIMONIAL_GROUPS.find((g) => g.value === (group ?? 'general'))?.label ?? 'General';
@@ -43,7 +43,6 @@ export default function TestimonialsPage() {
   const [text, setText] = useState('');
   const [group, setGroup] = useState<TestimonialGroup>('general');
   const { user } = useUser();
-  const firestore = useFirestore();
   const { toast } = useToast();
 
   const loadStories = useCallback(async () => {
@@ -61,14 +60,13 @@ export default function TestimonialsPage() {
   }, [loadStories]);
 
   useEffect(() => {
-    if (!user || !firestore) return;
-    getDoc(doc(firestore, 'users', user.uid)).then((snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        if (data.name && !name) setName(String(data.name));
-      }
+    if (!user) return;
+    apiFetch('/users/profile').then(res => {
+      if (res.ok) return res.json();
+    }).then(data => {
+      if (data?.user?.name && !name) setName(String(data.user.name));
     }).catch(() => {});
-  }, [user, firestore, name]);
+  }, [user, name]);
 
   const filteredStories = useMemo(() => stories, [stories]);
 

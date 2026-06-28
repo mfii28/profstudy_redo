@@ -12,8 +12,7 @@ import { useUser } from "@/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { updateUserPreferences } from "@/lib/user-data";
 import { type UserPreferences, type User as UserProfile } from "@/lib/db";
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '@/firebase/firestore';
+import { apiFetch } from '@/lib/api-client';
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function PreferencesSettingsPage() {
@@ -34,13 +33,17 @@ export default function PreferencesSettingsPage() {
         const fetchUserProfile = async () => {
           if (user) {
             setIsLoading(true);
-            const userDocRef = doc(db, 'users', user.uid);
-            const userDocSnap = await getDoc(userDocRef);
-            if (userDocSnap.exists()) {
-              const userProfile = userDocSnap.data() as UserProfile;
-              if (userProfile.preferences) {
-                setPrefs(userProfile.preferences);
+            try {
+              const res = await apiFetch('/users/profile');
+              if (res.ok) {
+                const data = await res.json();
+                const userProfile = data.user as UserProfile;
+                if (userProfile.preferences) {
+                  setPrefs(userProfile.preferences);
+                }
               }
+            } catch {
+              // ignore
             }
             setIsLoading(false);
           }

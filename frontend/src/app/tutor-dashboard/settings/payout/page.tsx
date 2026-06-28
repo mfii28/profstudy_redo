@@ -14,10 +14,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useUser, useFirestore } from "@/firebase";
+import { useUser } from "@/firebase";
 import { useToast } from '@/hooks/use-toast';
 import { type TutorDetails } from '@/lib/db';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { apiFetch } from '@/lib/api-client';
 import { Loader2, Banknote, Smartphone, Info } from 'lucide-react';
 import { savePayoutDetails } from '@/app/actions/payout';
 
@@ -26,7 +26,6 @@ type MomoNetwork = 'MTN' | 'Vodafone' | 'AirtelTigo';
 
 export default function TutorPayoutSettingsPage() {
   const { user: currentUser, isLoading: isAuthLoading } = useUser();
-  const firestore = useFirestore();
   const { toast } = useToast();
 
   const [isLoading, setIsLoading] = useState(true);
@@ -40,13 +39,12 @@ export default function TutorPayoutSettingsPage() {
   const [payoutPhoneNumber, setPayoutPhoneNumber] = useState('');
 
   useEffect(() => {
-    if (isAuthLoading || !currentUser || !firestore) return;
+    if (isAuthLoading || !currentUser) return;
 
     setIsLoading(true);
-    const userRef = doc(firestore, 'users', currentUser.uid);
-    const unsub = onSnapshot(userRef, (snap) => {
-      if (snap.exists()) {
-        const td = (snap.data()?.tutorDetails || {}) as TutorDetails;
+    apiFetch('/users/profile').then(res => res.ok ? res.json() : null).then(data => {
+      if (data?.user) {
+        const td = (data.user.tutorDetails || {}) as TutorDetails;
         if (td.payoutMethod) setPayoutMethod(td.payoutMethod);
         if (td.bankName) setBankName(td.bankName);
         if (td.bankAccountName) setBankAccountName(td.bankAccountName);
@@ -55,11 +53,8 @@ export default function TutorPayoutSettingsPage() {
         if (td.payoutPhoneNumber) setPayoutPhoneNumber(td.payoutPhoneNumber);
         if (td.momoNumber) setPayoutPhoneNumber((prev) => prev || td.momoNumber || '');
       }
-      setIsLoading(false);
-    }, () => setIsLoading(false));
-
-    return () => unsub();
-  }, [currentUser, firestore, isAuthLoading]);
+    }).catch(() => {}).finally(() => setIsLoading(false));
+  }, [currentUser, isAuthLoading]);
 
   const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();

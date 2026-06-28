@@ -7,8 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Activity, CheckCircle2, AlertCircle, Loader2, RefreshCw, Database, Globe, Server, Zap, Clock } from "lucide-react";
 import { useUser } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
-import { db } from '@/firebase/firestore';
-import { collection, getDocs, limit, query } from 'firebase/firestore';
+import { apiFetch } from '@/lib/api-client';
 
 type ServiceStatus = 'operational' | 'degraded' | 'outage' | 'checking';
 
@@ -31,9 +30,9 @@ export default function AdminSystemHealthPage() {
   const { user } = useUser();
   const { toast } = useToast();
   const [services, setServices] = useState<ServiceCheck[]>([
-    { name: 'Firestore Database', description: 'Primary database connectivity', status: 'checking', icon: <Database className="h-5 w-5" /> },
-    { name: 'Firebase Auth', description: 'Authentication service', status: 'checking', icon: <Server className="h-5 w-5" /> },
-    { name: 'Storage (R2/Local)', description: 'Media storage backend', status: 'checking', icon: <Zap className="h-5 w-5" /> },
+    { name: 'PostgreSQL (API)', description: 'Backend database connectivity', status: 'checking', icon: <Database className="h-5 w-5" /> },
+    { name: 'Supabase Auth', description: 'Authentication service', status: 'checking', icon: <Server className="h-5 w-5" /> },
+    { name: 'Storage (R2)', description: 'Media storage backend', status: 'checking', icon: <Zap className="h-5 w-5" /> },
     { name: 'Next.js Application', description: 'Web server / edge runtime', status: 'checking', icon: <Globe className="h-5 w-5" /> },
   ]);
   const [lastChecked, setLastChecked] = useState<Date | null>(null);
@@ -44,16 +43,16 @@ export default function AdminSystemHealthPage() {
     setIsRunning(true);
     setServices(prev => prev.map(s => ({ ...s, status: 'checking' as const })));
 
-    // Firestore check
-    const firestoreStart = Date.now();
-    let firestoreStatus: ServiceStatus = 'outage';
-    let firestoreLatency: number | undefined;
+    // Backend API health check via GET /users/profile
+    const apiStart = Date.now();
+    let apiStatus: ServiceStatus = 'outage';
+    let apiLatency: number | undefined;
     try {
-      await getDocs(query(collection(db!, 'platformSettings'), limit(1)));
-      firestoreLatency = Date.now() - firestoreStart;
-      firestoreStatus = firestoreLatency < 1000 ? 'operational' : 'degraded';
+      const res = await apiFetch('/users/profile');
+      apiLatency = Date.now() - apiStart;
+      apiStatus = res.ok ? 'operational' : 'degraded';
     } catch {
-      firestoreStatus = 'outage';
+      apiStatus = 'outage';
     }
 
     // Auth check — if we have a user object, auth is working
@@ -84,9 +83,9 @@ export default function AdminSystemHealthPage() {
     }
 
     setServices([
-      { name: 'Firestore Database', description: 'Primary database connectivity', status: firestoreStatus, latencyMs: firestoreLatency, icon: <Database className="h-5 w-5" /> },
-      { name: 'Firebase Auth', description: 'Authentication service', status: authStatus, latencyMs: undefined, icon: <Server className="h-5 w-5" /> },
-      { name: 'Storage (R2/Local)', description: 'Media storage backend', status: storageStatus, latencyMs: storageLatency, icon: <Zap className="h-5 w-5" /> },
+      { name: 'PostgreSQL (API)', description: 'Backend database connectivity', status: apiStatus, latencyMs: apiLatency, icon: <Database className="h-5 w-5" /> },
+      { name: 'Supabase Auth', description: 'Authentication service', status: authStatus, latencyMs: undefined, icon: <Server className="h-5 w-5" /> },
+      { name: 'Storage (R2)', description: 'Media storage backend', status: storageStatus, latencyMs: storageLatency, icon: <Zap className="h-5 w-5" /> },
       { name: 'Next.js Application', description: 'Web server / edge runtime', status: appStatus, latencyMs: appLatency, icon: <Globe className="h-5 w-5" /> },
     ]);
     setLastChecked(new Date());
@@ -163,7 +162,7 @@ export default function AdminSystemHealthPage() {
         <CardContent>
           <ul className="text-sm space-y-1 text-muted-foreground list-disc pl-5">
             <li><strong>Vercel Dashboard</strong> — deployment metrics, function logs, edge latency</li>
-            <li><strong>Firebase Console → Usage</strong> — Firestore reads/writes/storage quotas</li>
+            <li><strong>Supabase Dashboard</strong> — database connections, replication lag, auth metrics</li>
             <li><strong>Sentry / BetterStack</strong> — error tracking (set SENTRY_DSN env var)</li>
             <li><strong>Datadog / Grafana Cloud</strong> — infrastructure telemetry (optional)</li>
           </ul>

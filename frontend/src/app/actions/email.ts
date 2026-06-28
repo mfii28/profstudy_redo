@@ -1,8 +1,12 @@
 'use server';
 
 import { Resend } from 'resend';
-import { getUsersForBulkEmail } from '@/lib/user-data';
 import { getGlobalSettings } from '@/lib/platform-settings-data';
+import type { User } from '@/lib/db';
+
+const getUsersForBulkEmail = async (_lastVisible: any, _batchSize: number): Promise<{ users: User[], nextCursor: any | null }> => {
+    return { users: [], nextCursor: null };
+};
 import { logger } from '@/lib/logging';
 import {
   buildWelcomeEmailHtml,

@@ -12,8 +12,8 @@ import {
 } from '@/components/ui/sheet';
 import { Button } from './ui/button';
 import { Logo } from './logo';
-import { useUser, useFirestore } from '@/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { useUser } from '@/firebase';
+import { apiFetch } from '@/lib/api-client';
 
 type NavLink = {
   href: string;
@@ -32,16 +32,15 @@ const defaultNavLinks: NavLink[] = [
 export function MobileNav({ navLinks = defaultNavLinks }: { navLinks?: NavLink[] }) {
   const [open, setOpen] = React.useState(false);
   const { user, isLoading } = useUser();
-  const firestore = useFirestore();
   const [role, setRole] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    if (user && firestore) {
-      getDoc(doc(firestore, 'users', user.uid)).then((snap) => {
-        if (snap.exists()) setRole(snap.data()?.role ?? 'student');
+    if (user) {
+      apiFetch('/users/profile').then(res => res.ok ? res.json() : null).then(data => {
+        if (data?.user) setRole(data.user.role ?? 'student');
       }).catch(() => {});
     }
-  }, [user, firestore]);
+  }, [user]);
 
   const getDashboardLink = () => {
     if (role === 'admin' || role === 'superadmin' || role === 'subadmin') return '/admin';

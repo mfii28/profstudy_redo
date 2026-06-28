@@ -17,8 +17,8 @@ import { GALLERY_GROUPS, getPublishedGalleryItems, type GalleryItemDocument } fr
 import type { GalleryGroup } from '@/lib/db';
 import { GalleryMediaTile } from '@/components/gallery-media-tile';
 
-function groupLabel(group: GalleryGroup): string {
-  return GALLERY_GROUPS.find((g) => g.value === group)?.label ?? group;
+function groupLabel(group: GalleryGroup | undefined): string {
+  return GALLERY_GROUPS.find((g) => g.value === group)?.label ?? group ?? 'General';
 }
 
 export default function GalleryPage() {

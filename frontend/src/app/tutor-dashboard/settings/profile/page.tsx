@@ -16,7 +16,7 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { useUser, useFirestore } from "@/firebase";
+import { useUser } from "@/firebase";
 import { Skeleton } from "@/components/ui/skeleton";
 import { type User as AppUser } from '@/lib/db';
 import { useToast } from '@/hooks/use-toast';
@@ -25,11 +25,10 @@ import { Loader2, Upload, Camera, AlertCircle } from 'lucide-react';
 import { getPresignedUploadUrl, getPresignedDownloadUrl } from '@/app/actions/storage';
 import { uploadToR2 } from '@/lib/upload-client';
 import { cn } from '@/lib/utils';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { apiFetch } from '@/lib/api-client';
 
 export default function TutorProfileSettingsPage() {
   const { user: currentUser, isLoading: isAuthLoading } = useUser();
-  const firestore = useFirestore();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -46,22 +45,21 @@ export default function TutorProfileSettingsPage() {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
   useEffect(() => {
-    if (isAuthLoading || !currentUser || !firestore) return;
+    if (isAuthLoading || !currentUser) return;
 
     setIsLoading(true);
-    const userRef = doc(firestore, 'users', currentUser.uid);
-    const unsub = onSnapshot(userRef, async (snap) => {
-      if (snap.exists()) {
-        const data = snap.data() as AppUser;
-        setProfile(data);
+    apiFetch('/users/profile').then(res => res.ok ? res.json() : null).then(async (data) => {
+      if (data?.user) {
+        const profileData = data.user as AppUser;
+        setProfile(profileData);
 
-        if (data.avatar) {
-          if (data.avatar.startsWith('http')) {
-            setResolvedAvatarUrl(data.avatar);
+        if (profileData.avatar) {
+          if (profileData.avatar.startsWith('http')) {
+            setResolvedAvatarUrl(profileData.avatar);
           } else {
             try {
               const idToken = await currentUser.getIdToken(true);
-              const { url } = await getPresignedDownloadUrl(data.avatar, currentUser.uid, undefined, idToken);
+              const { url } = await getPresignedDownloadUrl(profileData.avatar, currentUser.uid, undefined, idToken);
               if (url) setResolvedAvatarUrl(url);
             } catch { }
           }
@@ -69,11 +67,8 @@ export default function TutorProfileSettingsPage() {
           setResolvedAvatarUrl(currentUser.photoURL || undefined);
         }
       }
-      setIsLoading(false);
-    }, () => setIsLoading(false));
-
-    return () => unsub();
-  }, [currentUser, firestore, isAuthLoading]);
+    }).catch(() => {}).finally(() => setIsLoading(false));
+  }, [currentUser, isAuthLoading]);
 
   const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();

@@ -2,7 +2,6 @@
 
 import { useMemo, useState, useEffect } from 'react';
 import Link from 'next/link';
-import { doc, onSnapshot } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -44,7 +43,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useUser } from '@/firebase';
-import { db } from '@/firebase/firestore';
 import {
   addUsersToClassroom,
   deleteManagedClassroom,
@@ -460,19 +458,18 @@ export function ClassroomOverview({ basePath }: ClassroomOverviewProps) {
   };
 
   useEffect(() => {
-    if (!membersModalClassroom || !user || !db) return;
+    if (!membersModalClassroom || !user) return;
 
-    const classroomRef = doc(db, 'classrooms', membersModalClassroom.id);
-    const unsubscribe = onSnapshot(classroomRef, async () => {
+    const refreshMembers = async () => {
       const idToken = await user.getIdToken();
       const result = await getClassroomMembers(idToken, membersModalClassroom.id);
       if (!result.error) {
         setMembers(result.members || []);
         await loadClassrooms(user);
       }
-    });
+    };
 
-    return () => unsubscribe();
+    refreshMembers();
   }, [membersModalClassroom, user]);
 
   const memberCandidates = useMemo(() => {

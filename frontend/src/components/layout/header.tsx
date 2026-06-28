@@ -11,9 +11,9 @@ import { ThemeToggle } from '../theme-toggle';
 import { ShoppingCart, LayoutDashboard } from 'lucide-react';
 import { useCart } from '@/lib/cart-context';
 import { Badge } from '../ui/badge';
-import { useUser, useFirestore } from '@/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { useUser } from '@/firebase';
 import { getPresignedDownloadUrl } from '@/app/actions/storage';
+import { apiFetch } from '@/lib/api-client';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 const navLinks = [
@@ -29,7 +29,6 @@ export function Header() {
   const pathname = usePathname();
   const { cartCount, openCart } = useCart();
   const { user, isLoading: isUserLoading } = useUser();
-  const firestore = useFirestore();
   const [mounted, setMounted] = React.useState(false);
   const [profile, setProfile] = React.useState<any>(null);
   const [resolvedAvatarUrl, setResolvedAvatarUrl] = React.useState<string | undefined>(undefined);
@@ -39,13 +38,13 @@ export function Header() {
   }, []);
 
   React.useEffect(() => {
-    if (user && firestore && mounted) {
+    if (user && mounted) {
       const fetchProfile = async () => {
         try {
-          const snap = await getDoc(doc(firestore, 'users', user.uid));
-          if (snap.exists()) {
-            const data = snap.data();
-            setProfile(data);
+          const res = await apiFetch('/users/profile');
+          if (res.ok) {
+            const data = await res.json();
+            setProfile(data.user);
             
             // Resolve Avatar URL
             if (data.avatar) {
@@ -65,7 +64,7 @@ export function Header() {
       };
       fetchProfile();
     }
-  }, [user, firestore, mounted]);
+  }, [user, mounted]);
 
   const getDashboardLink = () => {
     if (!profile) return '/student-dashboard';

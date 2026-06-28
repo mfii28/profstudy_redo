@@ -144,7 +144,7 @@ export default function AboutPage() {
                           <Icon className="size-5 text-accent" />
                           <h3 className="font-headline font-bold text-lg text-primary">{p.title}</h3>
                         </div>
-                        <p className="text-muted-foreground text-sm leading-relaxed">{p.body}</p>
+                        <p className="text-muted-foreground text-sm leading-relaxed">{p.description}</p>
                       </div>
                     </div>
                   </div>
@@ -168,12 +168,12 @@ export default function AboutPage() {
               {values.map((v) => {
                 const Icon = VALUE_ICON_MAP[v.iconKey];
                 return (
-                  <div key={v.label} className="bg-card rounded-xl border p-6">
+                  <div key={v.title} className="bg-card rounded-xl border p-6">
                     <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center mb-4">
                       <Icon className="size-5 text-accent" />
                     </div>
-                    <h3 className="font-headline font-bold text-base text-primary mb-2">{v.label}</h3>
-                    <p className="text-sm text-muted-foreground leading-relaxed">{v.desc}</p>
+                    <h3 className="font-headline font-bold text-base text-primary mb-2">{v.title}</h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed">{v.description}</p>
                   </div>
                 );
               })}

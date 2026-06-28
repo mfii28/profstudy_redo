@@ -103,7 +103,7 @@ export default function Home() {
           books = Array.isArray(booksJson.books) ? booksJson.books : [];
         } else {
           // Keep homepage books visible when API route has transient issues.
-          books = await getBooks({ includeDraft: false, max: 4 });
+          books = (await getBooks({ includeDraft: false })).slice(0, 4);
         }
 
         setTopCourses(featured);

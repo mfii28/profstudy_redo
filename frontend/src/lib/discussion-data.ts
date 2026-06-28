@@ -1,65 +1,31 @@
-import { collection, getDocs, doc, setDoc, query, orderBy, where } from 'firebase/firestore';
-import { db } from '@/firebase/firestore';
+import { apiFetch } from '@/lib/api-client';
 import type { DiscussionThread } from './db';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
 /**
- * @fileOverview Isomorphic data service for community discussions.
+ * @fileOverview Data service for community discussions.
+ * Routes through the Python backend REST API.
  */
 
 export const getDiscussions = async (): Promise<DiscussionThread[]> => {
-    if (!db) return [];
     try {
-        const discussionsCollection = collection(db, 'discussionThreads');
-        const q = query(discussionsCollection, orderBy("lastActivity", "desc"));
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DiscussionThread));
-    } catch (error) {
-        return [];
-    }
+        const res = await apiFetch('/discussions');
+        if (!res.ok) return [];
+        return (await res.json()).discussions || [];
+    } catch { return []; }
 };
 
 export const getDiscussionsByCourse = async (courseTitle: string): Promise<DiscussionThread[]> => {
-    if (!db || !courseTitle) return [];
     try {
-        const discussionsCollection = collection(db, 'discussionThreads');
-        const q = query(
-            discussionsCollection,
-            where('course', '==', courseTitle),
-            orderBy('lastActivity', 'desc')
-        );
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DiscussionThread));
-    } catch (error) {
-        return [];
-    }
+        const res = await apiFetch(`/discussions?course=${encodeURIComponent(courseTitle)}`);
+        if (!res.ok) return [];
+        return (await res.json()).discussions || [];
+    } catch { return []; }
 };
 
-export const addDiscussionThread = async (newThread: DiscussionThread) => {
-    if (!db) return;
-    const threadRef = doc(db, 'discussionThreads', newThread.id);
-    await setDoc(threadRef, newThread)
-        .catch(async () => {
-            const permissionError = new FirestorePermissionError({
-                path: threadRef.path,
-                operation: 'create',
-                requestResourceData: newThread,
-            } satisfies SecurityRuleContext);
-            errorEmitter.emit('permission-error', permissionError);
-        });
-}
+export const addDiscussionThread = async (newThread: DiscussionThread): Promise<void> => {
+    await apiFetch('/discussions', { method: 'POST', body: JSON.stringify(newThread) });
+};
 
 export const updateDiscussionThread = async (thread: DiscussionThread): Promise<void> => {
-    if (!db) return;
-    const threadRef = doc(db, 'discussionThreads', thread.id);
-    await setDoc(threadRef, thread, { merge: true })
-        .catch(async () => {
-            const permissionError = new FirestorePermissionError({
-                path: threadRef.path,
-                operation: 'update',
-                requestResourceData: thread,
-            } satisfies SecurityRuleContext);
-            errorEmitter.emit('permission-error', permissionError);
-        });
-}
+    await apiFetch(`/discussions/${thread.id}`, { method: 'PUT', body: JSON.stringify(thread) });
+};

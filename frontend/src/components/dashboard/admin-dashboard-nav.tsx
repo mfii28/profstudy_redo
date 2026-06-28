@@ -39,9 +39,8 @@ import {
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useUser } from '@/firebase';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '@/firebase/firestore';
 import type { User as UserProfile } from '@/lib/db';
+import { apiFetch } from '@/lib/api-client';
 import { ADMIN_MVP_NAV_CONFIG, type AdminNavIconKey } from '@/lib/admin-mvp-config';
 import { Input } from '@/components/ui/input';
 
@@ -83,10 +82,14 @@ export function AdminDashboardNav() {
   React.useEffect(() => {
     const fetchUserProfile = async () => {
       if (currentUser) {
-        const userDocRef = doc(db, 'users', currentUser.uid);
-        const userDocSnap = await getDoc(userDocRef);
-        if (userDocSnap.exists()) {
-          setUserProfile(userDocSnap.data() as UserProfile);
+        try {
+          const res = await apiFetch('/users/profile');
+          if (res.ok) {
+            const data = await res.json();
+            setUserProfile(data.user as UserProfile);
+          }
+        } catch {
+          // ignore
         }
       }
       setIsProfileLoading(false);

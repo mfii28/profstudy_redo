@@ -4,9 +4,9 @@ import React from 'react';
 import { Loader2, ShieldAlert } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { useUser, useFirestore } from '@/firebase';
+import { useUser } from '@/firebase';
 import { useRouter } from 'next/navigation';
-import { doc, getDoc } from 'firebase/firestore';
+import { apiFetch } from '@/lib/api-client';
 
 export default function ClassroomLayout({
   children,
@@ -15,7 +15,6 @@ export default function ClassroomLayout({
 }) {
   const router = useRouter();
   const { user: currentUser, isLoading } = useUser();
-  const firestore = useFirestore();
   const [mounted, setMounted] = React.useState(false);
   const [tutorProfile, setTutorProfile] = React.useState<Record<string, unknown> | null>(null);
   const [isVerifying, setIsVerifying] = React.useState(true);
@@ -34,27 +33,21 @@ export default function ClassroomLayout({
       return;
     }
 
-    if (!firestore) {
-      setVerifyError('Classroom setup is still loading. Please wait a moment and retry.');
-      setIsVerifying(false);
-      return;
-    }
-
     let cancelled = false;
 
     const verifyCourseAuthor = async () => {
       setVerifyError(null);
       try {
-        const userRef = doc(firestore, 'users', currentUser.uid);
-        const userSnap = await getDoc(userRef);
+        const res = await apiFetch('/users/profile');
         if (cancelled) return;
 
-        if (!userSnap.exists()) {
+        if (!res.ok) {
           router.replace('/login');
           return;
         }
 
-        const userData = userSnap.data();
+        const data = await res.json();
+        const userData = data.user;
 
         if (userData?.role !== 'tutor') {
           router.replace('/student-dashboard');
@@ -76,7 +69,7 @@ export default function ClassroomLayout({
     return () => {
       cancelled = true;
     };
-  }, [mounted, isLoading, currentUser, firestore, router]);
+  }, [mounted, isLoading, currentUser, router]);
 
   if (!mounted || isLoading || isVerifying) {
     return (

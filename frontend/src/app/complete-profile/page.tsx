@@ -2,18 +2,17 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { doc, updateDoc } from 'firebase/firestore';
-import { useUser, useFirestore } from '@/firebase';
+import { useUser } from '@/firebase';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { validatePhoneNumber } from '@/lib/signup-validation';
+import { apiFetch } from '@/lib/api-client';
 
 export default function CompleteProfilePage() {
   const { user } = useUser();
-  const firestore = useFirestore();
   const router = useRouter();
   const { toast } = useToast();
   const [phone, setPhone] = useState('');
@@ -21,7 +20,7 @@ export default function CompleteProfilePage() {
 
   const handleSave = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!user || !firestore) return;
+    if (!user) return;
     const validation = validatePhoneNumber(phone);
     if (!validation.isValid || !validation.normalized) {
       toast({ variant: 'destructive', title: 'Invalid phone number', description: validation.error });
@@ -29,9 +28,11 @@ export default function CompleteProfilePage() {
     }
     setIsSaving(true);
     try {
-      await updateDoc(doc(firestore, 'users', user.uid), {
-        phone_number: validation.normalized,
+      const res = await apiFetch('/users/profile', {
+        method: 'PUT',
+        body: JSON.stringify({ phone_number: validation.normalized }),
       });
+      if (!res.ok) throw new Error('Failed to update');
       toast({ title: 'Profile updated' });
       router.replace('/student-dashboard');
     } catch (error) {

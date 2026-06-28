@@ -15,8 +15,7 @@ import {
 import { Button } from './ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
-import { useUser, useFirestore } from '@/firebase';
-import { collection, query, where, getDocs, updateDoc, arrayUnion } from 'firebase/firestore';
+import { useUser } from '@/firebase';
 
 interface ZoomMeetingProps {
   meetingId: string;
@@ -28,7 +27,6 @@ export function ZoomMeeting({ meetingId, userName, role }: ZoomMeetingProps) {
   const router = useRouter();
   const { toast } = useToast();
   const { user } = useUser();
-  const firestore = useFirestore();
   const [isLoading, setIsLoading] = useState(true);
   const [loadingStep, setLoadingStep] = useState('Initializing SDK...');
   const [error, setError] = useState<string | null>(null);
@@ -42,21 +40,10 @@ export function ZoomMeeting({ meetingId, userName, role }: ZoomMeetingProps) {
   const [isMuted, setIsMuted] = useState(true); // start muted
   const [isVideoOff, setIsVideoOff] = useState(true); // start with camera off
 
-  // ── Attendance via query (meetingId is NOT the Firestore document ID) ──
+  // ── Attendance (stub - migrated to REST API) ──
   const recordAttendance = useCallback(async () => {
-    if (!user || !firestore || role === 1) return;
-    try {
-      const classesRef = collection(firestore, 'liveClasses');
-      const q = query(classesRef, where('meetingId', '==', meetingId));
-      const snapshot = await getDocs(q);
-      if (!snapshot.empty) {
-        const docRef = snapshot.docs[0].ref;
-        await updateDoc(docRef, { attendance: arrayUnion(user.uid) });
-      }
-    } catch {
-      console.warn('[Attendance] Logging failed — non-critical');
-    }
-  }, [user, firestore, role, meetingId]);
+    // Attendance now recorded via the backend API
+  }, [user, role, meetingId]);
 
   // ── SDK Initialization (runs once) ──
   useEffect(() => {

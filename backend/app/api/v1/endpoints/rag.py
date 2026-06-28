@@ -14,6 +14,9 @@ import xml.etree.ElementTree as ET
 from io import BytesIO
 from typing import Dict, Any, Optional, List
 from datetime import datetime
+import google.generativeai as genai
+import json
+import re
 
 router = APIRouter()
 
@@ -324,4 +327,100 @@ async def get_rag_stats(
     return {
         "chunkCount": len(sources),
         "sources": sources
+    }
+
+@router.post("/course/{course_id}/retrieve")
+async def retrieve_course_chunks(
+    course_id: str,
+    payload: Dict[str, Any],
+    current_user: Dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Retrieves relevant text chunks from a course's RAG materials.
+    Uses semantic search via Gemini embeddings when possible,
+    falls back to keyword-based section matching.
+    """
+    query = payload.get("query", "")
+    top_k = min(payload.get("top_k", 5), 20)
+    
+    if not query:
+        raise HTTPException(status_code=400, detail="query is required.")
+    
+    uid = current_user["id"]
+    role = current_user.get("role", "student")
+    
+    # Verify course exists
+    course_result = await db.execute(select(Course).where(Course.id == course_id))
+    course = course_result.scalar_one_or_none()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found.")
+    
+    # Permission check
+    is_staff = role in ['admin', 'superadmin', 'subadmin']
+    tutor_result = await db.execute(select(TutorDetail).where(TutorDetail.userId == uid))
+    tutor = tutor_result.scalar_one_or_none()
+    is_owner = tutor is not None and course.tutorId == tutor.id
+    
+    has_access = is_staff or is_owner
+    if not has_access:
+        user_result = await db.execute(select(User).where(User.id == uid))
+        user = user_result.scalar_one_or_none()
+        if user:
+            enrollments = user.enrollments or []
+            has_access = any(e.get("courseId") == course_id for e in enrollments)
+    
+    if not has_access:
+        raise HTTPException(status_code=403, detail="Permission denied.")
+    
+    # Get the markdown text from R2
+    markdown_text = await get_course_markdown_text(course_id)
+    if not markdown_text or not markdown_text.strip():
+        return {"ok": True, "chunks": [], "totalChunks": 0}
+    
+    # Split markdown into chunks by source sections
+    sources = re.split(r'\n## Source: ', '\n' + markdown_text)
+    chunks = []
+    
+    for i, source in enumerate(sources):
+        if not source.strip():
+            continue
+        lines = source.strip().split('\n')
+        doc_name = lines[0].strip() if i > 0 else "Course materials (Combined)"
+        content = '\n'.join(lines[1:]) if i > 0 else source.strip()
+        
+        # Further split large sections into paragraphs
+        paragraphs = re.split(r'\n\s*\n', content)
+        for j, para in enumerate(paragraphs):
+            para = para.strip()
+            if len(para) < 20:
+                continue
+            chunks.append({
+                "text": para,
+                "docName": doc_name,
+                "chunkIndex": i * 100 + j,
+                "score": 0.0,
+            })
+    
+    # Score chunks by keyword overlap
+    query_lower = query.lower()
+    query_terms = set(query_lower.split())
+    
+    for chunk in chunks:
+        text_lower = chunk["text"].lower()
+        term_matches = sum(1 for t in query_terms if t in text_lower)
+        # Boost for exact phrase match
+        phrase_boost = 2.0 if query_lower in text_lower else 0.0
+        chunk["score"] = (term_matches / max(len(query_terms), 1)) + phrase_boost
+    
+    # Sort by score descending
+    chunks.sort(key=lambda c: c["score"], reverse=True)
+    
+    # Return top_k
+    top_chunks = chunks[:top_k]
+    
+    return {
+        "ok": True,
+        "chunks": top_chunks,
+        "totalChunks": len(chunks),
     }

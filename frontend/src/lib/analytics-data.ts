@@ -29,3 +29,12 @@ export const getSubjectMasteryData = async (userId: string): Promise<SubjectMast
 export const getFunnelData = async (): Promise<FunnelDataPoint[]> => {
     return [];
 };
+
+export const recordStudySession = async (...args: any[]): Promise<void> => {
+    const data = args.length === 1 && typeof args[0] === 'object' ? args[0]
+        : { userId: args[0], courseId: args[1], duration: args[2] };
+    await apiFetch('/analytics/study-session', {
+        method: 'POST',
+        body: JSON.stringify(data),
+    });
+};

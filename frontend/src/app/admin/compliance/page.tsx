@@ -30,7 +30,7 @@ export default function AdminCompliancePage() {
     if (docs) {
         setDocs({
             ...docs,
-            [docKey]: { ...docs[docKey], content }
+            [docKey]: content,
         });
     }
   }

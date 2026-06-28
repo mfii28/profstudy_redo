@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.models.models import User, Course, Order, Review, Notification, Book, PlatformSettings
+from app.models.models import User, Course, Order, Review, Notification, Book, PlatformSettings, Coupon
 from typing import Dict, Optional
 from datetime import datetime
 import random, json
@@ -290,3 +290,70 @@ async def unblock_ip(
         await db.flush()
 
     return {"ok": True}
+
+
+@router.post("/coupons")
+async def create_coupon(
+    data: Dict,
+    current_user: Dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a new coupon (admin only)."""
+    _require_admin(current_user)
+    now = datetime.utcnow()
+    coupon = Coupon(
+        id=f"cup-{int(now.timestamp())}",
+        code=data.get("code", "").strip().upper(),
+        discountPct=data.get("discountPct", 0),
+        maxUses=data.get("maxUses"),
+        courseId=data.get("courseId"),
+        expiresAt=datetime.fromisoformat(data["expiresAt"]) if data.get("expiresAt") else None,
+        createdAt=now,
+        updatedAt=now,
+    )
+    db.add(coupon)
+    await db.flush()
+    return {"success": True, "id": coupon.id}
+
+
+@router.get("/coupons")
+async def list_coupons(
+    current_user: Dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all coupons (admin only)."""
+    _require_admin(current_user)
+    result = await db.execute(select(Coupon).order_by(Coupon.createdAt.desc()))
+    coupons = result.scalars().all()
+    return {
+        "coupons": [
+            {
+                "id": c.id,
+                "code": c.code,
+                "discountPct": c.discountPct,
+                "maxUses": c.maxUses,
+                "usedCount": c.usedCount,
+                "courseId": c.courseId,
+                "expiresAt": c.expiresAt.isoformat() if c.expiresAt else None,
+                "createdAt": c.createdAt.isoformat() if c.createdAt else None,
+            }
+            for c in coupons
+        ]
+    }
+
+
+@router.delete("/coupons/{coupon_id}")
+async def delete_coupon(
+    coupon_id: str,
+    current_user: Dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a coupon (admin only)."""
+    _require_admin(current_user)
+    result = await db.execute(select(Coupon).where(Coupon.id == coupon_id))
+    coupon = result.scalar_one_or_none()
+    if not coupon:
+        raise HTTPException(status_code=404, detail="Coupon not found")
+    await db.delete(coupon)
+    await db.flush()
+    return {"success": True}

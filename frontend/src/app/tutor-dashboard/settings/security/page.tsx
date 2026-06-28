@@ -9,10 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Loader2, Shield, Lock, Bell, LogOut } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
-import { useUser, useFirestore, useAuth } from '@/firebase';
-import { signOut } from 'firebase/auth';
-import { revokeAllSessions } from '@/app/actions/session';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { useUser, useAuth } from '@/firebase';
+import { apiFetch } from '@/lib/api-client';
 import type { User as AppUser } from '@/lib/db';
 
 interface SecuritySettings {
@@ -25,7 +23,6 @@ interface SecuritySettings {
 
 export default function TutorSecuritySettingsPage() {
   const { user: currentUser } = useUser();
-  const firestore = useFirestore();
   const auth = useAuth();
   const { toast } = useToast();
   const [isRevoking, setIsRevoking] = useState(false);
@@ -41,14 +38,11 @@ export default function TutorSecuritySettingsPage() {
   useEffect(() => {
     const fetchSecuritySettings = async () => {
       if (!currentUser) return;
-      if (!firestore) {
-        setIsLoading(false);
-        return;
-      }
       try {
-        const userDoc = await getDoc(doc(firestore, 'users', currentUser.uid));
-        if (userDoc.exists()) {
-          const userData = userDoc.data() as any;
+        const res = await apiFetch('/users/profile');
+        if (res.ok) {
+          const data = await res.json();
+          const userData = data.user as any;
           if (userData.securitySettings) {
             setSecuritySettings(userData.securitySettings);
           }
@@ -61,20 +55,15 @@ export default function TutorSecuritySettingsPage() {
       }
     };
     fetchSecuritySettings();
-  }, [currentUser, firestore, toast]);
+  }, [currentUser, toast]);
 
   const handleRevokeAllSessions = async () => {
     if (!currentUser || !auth) return;
     setIsRevoking(true);
     try {
-      const idToken = await currentUser.getIdToken(true);
-      const result = await revokeAllSessions(idToken);
-      if ('error' in result) {
-        toast({ variant: 'destructive', title: 'Revocation Failed', description: result.error });
-        return;
-      }
+      const { error } = await auth.signOut();
+      if (error) throw error;
       toast({ title: 'All Sessions Revoked', description: 'You will be redirected to sign in again.' });
-      await signOut(auth);
     } catch {
       toast({ variant: 'destructive', title: 'An error occurred. Please try again.' });
     } finally {
@@ -83,12 +72,13 @@ export default function TutorSecuritySettingsPage() {
   };
 
   const handleSave = async () => {
-    if (!currentUser || !firestore) return;
+    if (!currentUser) return;
 
     setIsSaving(true);
     try {
-      await updateDoc(doc(firestore, 'users', currentUser.uid), {
-        securitySettings,
+      await apiFetch('/users/profile', {
+        method: 'PUT',
+        body: JSON.stringify({ securitySettings }),
       });
       toast({ title: 'Security settings saved', description: 'Your security preferences have been updated.' });
     } catch (error) {
@@ -104,20 +94,6 @@ export default function TutorSecuritySettingsPage() {
       <div className="flex items-center justify-center p-12">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
-    );
-  }
-
-  if (currentUser && !firestore) {
-    return (
-      <Alert>
-        <AlertTitle>Setup still loading</AlertTitle>
-        <AlertDescription>
-          Security settings are not ready yet. Wait a moment, then try again.
-        </AlertDescription>
-        <Button className="mt-3" variant="outline" onClick={() => window.location.reload()}>
-          Retry
-        </Button>
-      </Alert>
     );
   }
 

@@ -12,13 +12,13 @@ import { type User, type Course, type Review } from "@/lib/db";
 import { getUsersByIds } from "@/lib/user-data";
 import { getCoursesByTutorId } from "@/lib/course-data";
 import { getReviewsForCourses } from "@/lib/review-data";
-import { useUser, useFirestore } from "@/firebase";
+import { useUser } from "@/firebase";
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from "@/lib/utils";
-import { doc, getDoc } from 'firebase/firestore';
+import { apiFetch } from '@/lib/api-client';
 import { isQuotaError } from '@/lib/service-errors';
 import { reportQuotaError } from '@/lib/feedback/quota-state';
 
@@ -26,7 +26,6 @@ type FilterType = 'recent' | 'unanswered' | 'low-rating';
 
 export default function ReviewsPage() {
     const { user: tutorAuth, isLoading: isTutorLoading } = useUser();
-    const firestore = useFirestore();
     const { toast } = useToast();
     
     const [tutor, setTutor] = useState<User | null>(null);
@@ -54,18 +53,12 @@ export default function ReviewsPage() {
 
     const fetchData = useCallback(async () => {
         if (!tutorAuth) return;
-        if (!firestore) {
-            setLoadError('Reviews are still loading. Please wait a moment and retry.');
-            setIsLoading(false);
-            return;
-        }
         setIsLoading(true);
         setLoadError(null);
         try {
-            const tutorDocRef = doc(firestore, 'users', tutorAuth.uid);
-            const tutorDocSnap = await getDoc(tutorDocRef);
-            const tutorData = tutorDocSnap.exists()
-                ? (tutorDocSnap.data() as User)
+            const res = await apiFetch('/users/profile');
+            const tutorData = res.ok
+                ? ((await res.json()).user as User)
                 : ({
                     id: tutorAuth.uid,
                     name: tutorAuth.displayName || 'Instructor',
@@ -92,13 +85,13 @@ export default function ReviewsPage() {
         } finally {
             setIsLoading(false);
         }
-    }, [tutorAuth, firestore]);
+    }, [tutorAuth]);
 
     useEffect(() => {
-        if (!isTutorLoading && tutorAuth && firestore) {
+        if (!isTutorLoading && tutorAuth) {
             fetchData();
         }
-    }, [tutorAuth, isTutorLoading, firestore, fetchData]);
+    }, [tutorAuth, isTutorLoading, fetchData]);
 
     const processedReviews = useMemo(() => {
         let result = [...reviews];

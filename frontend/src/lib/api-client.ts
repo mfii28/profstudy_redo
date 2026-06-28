@@ -2,12 +2,21 @@
 
 /**
  * Shared API client for calling the Python backend.
- * Automatically attaches Supabase JWT when available.
+ * Automatically attaches Supabase JWT when available (client-side only).
  */
 
-import { supabase } from '@/lib/supabase-client';
-
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
+async function getClientToken(): Promise<string | undefined> {
+  try {
+    // Dynamic import ensures @supabase/ssr is only loaded on the client
+    const mod = await import('@/lib/supabase-client');
+    const { data: { session } } = await mod.supabase.auth.getSession();
+    return session?.access_token;
+  } catch {
+    return undefined;
+  }
+}
 
 export async function apiFetch(
   path: string,
@@ -15,11 +24,9 @@ export async function apiFetch(
 ): Promise<Response> {
   let token: string | undefined;
 
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    token = session?.access_token;
-  } catch {
-    // Not in browser or not authenticated
+  // Only attempt token retrieval on the client side
+  if (typeof window !== 'undefined') {
+    token = await getClientToken();
   }
 
   const headers: Record<string, string> = {

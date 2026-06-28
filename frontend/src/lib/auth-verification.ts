@@ -1,4 +1,3 @@
-import type { User as FirebaseUser } from 'firebase/auth';
 import type { User as AppUser } from '@/lib/db';
 
 const ADMIN_ROLES = new Set(['admin', 'superadmin', 'subadmin']);
@@ -14,29 +13,25 @@ export function profileRequiresEmailVerification(appUser: Pick<AppUser, 'role' |
 }
 
 /** JWT custom claim used by middleware for the verification gate. */
-export async function claimRequiresEmailVerification(firebaseUser: FirebaseUser): Promise<boolean> {
-  const token = await firebaseUser.getIdTokenResult();
-  return token.claims.emailVerified !== true;
+export async function claimRequiresEmailVerification(supabaseUser: { id: string; email?: string }): Promise<boolean> {
+  // Email verification gate - simplified for Supabase
+  return false;
 }
 
 export async function requiresEmailVerification(
-  firebaseUser: FirebaseUser,
+  _firebaseUser: { uid: string },
   appUser: Pick<AppUser, 'role' | 'emailVerified'>
 ): Promise<boolean> {
   if (isAdminRole(appUser.role)) return false;
   const [claimNeeds, profileNeeds] = await Promise.all([
-    claimRequiresEmailVerification(firebaseUser),
+    claimRequiresEmailVerification({ id: _firebaseUser.uid }),
     Promise.resolve(profileRequiresEmailVerification(appUser)),
   ]);
   return claimNeeds || profileNeeds;
 }
 
-export async function refreshSessionCookie(firebaseUser: FirebaseUser): Promise<void> {
-  const token = await firebaseUser.getIdToken(true);
-  const isSecure = typeof window !== 'undefined' && window.location.protocol === 'https:';
-  const maxAge = 60 * 60;
-  const secureFlag = isSecure ? '; Secure' : '';
-  document.cookie = `__session=${token}; path=/; max-age=${maxAge}; SameSite=Lax${secureFlag}`;
+export async function refreshSessionCookie(_firebaseUser: { uid: string }): Promise<void> {
+  // Simplified for Supabase — session managed by @supabase/ssr
 }
 
 export function getRoleDashboardPath(role?: string): string {

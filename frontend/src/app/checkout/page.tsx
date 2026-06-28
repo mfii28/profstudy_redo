@@ -8,12 +8,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { useCart } from '@/lib/cart-context';
-import { useUser, useFirestore } from '@/firebase';
+import { useUser } from '@/firebase';
 import { initiateCartCheckout } from '@/app/actions/checkout';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, ShieldCheck, MapPin } from 'lucide-react';
-import { doc, getDoc } from 'firebase/firestore';
 import { type User as AppUser, type UserAddress } from '@/lib/db';
+import { apiFetch } from '@/lib/api-client';
 import {
   applyPercentDiscountToSubtotal,
   clampDiscountPercent,
@@ -28,7 +28,6 @@ export default function CheckoutPage() {
   const router = useRouter();
   const { cartItems, totalPrice, loading: isCartLoading } = useCart();
   const { user, isLoading: isUserLoading } = useUser();
-  const firestore = useFirestore();
   const { toast } = useToast();
   const [isProcessing, setIsProcessing] = useState(false);
   const [email, setEmail] = useState('');
@@ -54,30 +53,34 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     const fetchUserData = async () => {
-      if (user && firestore) {
-        const userDocRef = doc(firestore, 'users', user.uid);
-        const userDoc = await getDoc(userDocRef);
-        if (userDoc.exists()) {
-          const userData = userDoc.data() as AppUser;
-          if ((ADMIN_ROLES as readonly string[]).includes(userData.role)) {
-            router.replace('/admin');
-            return;
+      if (user) {
+        try {
+          const res = await apiFetch('/users/profile');
+          if (res.ok) {
+            const data = await res.json();
+            const userData = data.user as AppUser;
+            if ((ADMIN_ROLES as readonly string[]).includes(userData.role)) {
+              router.replace('/admin');
+              return;
+            }
+            setEmail(user.email || userData.email || '');
+            if (userData.address) {
+              setAddress(userData.address);
+            }
+            const rewards = parseAffiliateRewards(userData.affiliateDiscountRewards);
+            setAffiliateDiscountPercent(clampDiscountPercent(rewards?.discountPercentAvailable ?? 0));
+          } else {
+            setEmail(user.email || '');
           }
-          setEmail(user.email || userData.email || '');
-          if (userData.address) {
-            setAddress(userData.address);
-          }
-          const rewards = parseAffiliateRewards(userData.affiliateDiscountRewards);
-          setAffiliateDiscountPercent(clampDiscountPercent(rewards?.discountPercentAvailable ?? 0));
+        } catch {
+          setEmail(user.email || '');
         }
-      } else if (user) {
-        setEmail(user.email || '');
       }
     };
     if (!isUserLoading) {
       fetchUserData();
     }
-  }, [user, isUserLoading, firestore]);
+  }, [user, isUserLoading, router]);
 
   const handlePayment = async () => {
     if (!user) {

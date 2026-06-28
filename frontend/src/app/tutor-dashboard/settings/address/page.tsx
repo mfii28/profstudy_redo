@@ -9,13 +9,12 @@ import { Button } from '@/components/ui/button';
 import { Loader2, MapPin } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
-import { useUser, useFirestore } from '@/firebase';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { useUser } from '@/firebase';
+import { apiFetch } from '@/lib/api-client';
 import type { User as AppUser, UserAddress } from '@/lib/db';
 
 export default function TutorAddressSettingsPage() {
   const { user: currentUser } = useUser();
-  const firestore = useFirestore();
   const { toast } = useToast();
   const [address, setAddress] = useState<UserAddress>({
     line1: '',
@@ -30,14 +29,11 @@ export default function TutorAddressSettingsPage() {
   useEffect(() => {
     const fetchAddress = async () => {
       if (!currentUser) return;
-      if (!firestore) {
-        setIsLoading(false);
-        return;
-      }
       try {
-        const userDoc = await getDoc(doc(firestore, 'users', currentUser.uid));
-        if (userDoc.exists()) {
-          const userData = userDoc.data() as AppUser;
+        const res = await apiFetch('/users/profile');
+        if (res.ok) {
+          const data = await res.json();
+          const userData = data.user as AppUser;
           if (userData.address) {
             setAddress(userData.address);
           }
@@ -50,10 +46,10 @@ export default function TutorAddressSettingsPage() {
       }
     };
     fetchAddress();
-  }, [currentUser, firestore, toast]);
+  }, [currentUser, toast]);
 
   const handleSave = async () => {
-    if (!currentUser || !firestore) return;
+    if (!currentUser) return;
 
     if (!address.line1.trim() || !address.city.trim() || !address.region.trim()) {
       toast({ variant: 'destructive', title: 'Missing required fields', description: 'Please fill in all required fields.' });
@@ -62,9 +58,11 @@ export default function TutorAddressSettingsPage() {
 
     setIsSaving(true);
     try {
-      await updateDoc(doc(firestore, 'users', currentUser.uid), {
-        address,
+      const res = await apiFetch('/users/profile', {
+        method: 'PUT',
+        body: JSON.stringify({ address }),
       });
+      if (!res.ok) throw new Error('Failed to save');
       toast({ title: 'Address saved', description: 'Your teaching address has been updated.' });
     } catch (error) {
       console.error('Failed to save address:', error);
@@ -73,28 +71,6 @@ export default function TutorAddressSettingsPage() {
       setIsSaving(false);
     }
   };
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center p-12">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  if (currentUser && !firestore) {
-    return (
-      <Alert>
-        <AlertTitle>Setup still loading</AlertTitle>
-        <AlertDescription>
-          Address settings are not ready yet. Wait a moment, then try again.
-        </AlertDescription>
-        <Button className="mt-3" variant="outline" onClick={() => window.location.reload()}>
-          Retry
-        </Button>
-      </Alert>
-    );
-  }
 
   return (
     <Card>

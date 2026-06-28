@@ -15,8 +15,8 @@ import {
 import { Loader2, Settings2 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
-import { useUser, useFirestore } from '@/firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { useUser } from '@/firebase';
+import { apiFetch } from '@/lib/api-client';
 
 interface TutorPreferences {
   language?: string;
@@ -30,7 +30,6 @@ interface TutorPreferences {
 
 export default function TutorPreferencesSettingsPage() {
   const { user: currentUser } = useUser();
-  const firestore = useFirestore();
   const { toast } = useToast();
   const [preferences, setPreferences] = useState<TutorPreferences>({
     language: 'en',
@@ -47,14 +46,11 @@ export default function TutorPreferencesSettingsPage() {
   useEffect(() => {
     const fetchPreferences = async () => {
       if (!currentUser) return;
-      if (!firestore) {
-        setIsLoading(false);
-        return;
-      }
       try {
-        const userDoc = await getDoc(doc(firestore, 'users', currentUser.uid));
-        if (userDoc.exists()) {
-          const userData = userDoc.data() as any;
+        const res = await apiFetch('/users/profile');
+        if (res.ok) {
+          const data = await res.json();
+          const userData = data.user as any;
           if (userData.tutorPreferences) {
             setPreferences({
               ...preferences,
@@ -70,15 +66,16 @@ export default function TutorPreferencesSettingsPage() {
       }
     };
     fetchPreferences();
-  }, [currentUser, firestore, toast]);
+  }, [currentUser, toast]);
 
   const handleSave = async () => {
-    if (!currentUser || !firestore) return;
+    if (!currentUser) return;
 
     setIsSaving(true);
     try {
-      await updateDoc(doc(firestore, 'users', currentUser.uid), {
-        tutorPreferences: preferences,
+      await apiFetch('/users/profile', {
+        method: 'PUT',
+        body: JSON.stringify({ tutorPreferences: preferences }),
       });
       toast({ title: 'Preferences saved', description: 'Your preferences have been updated.' });
     } catch (error) {
@@ -94,20 +91,6 @@ export default function TutorPreferencesSettingsPage() {
       <div className="flex items-center justify-center p-12">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
-    );
-  }
-
-  if (currentUser && !firestore) {
-    return (
-      <Alert>
-        <AlertTitle>Setup still loading</AlertTitle>
-        <AlertDescription>
-          Preferences are not ready yet. Wait a moment, then try again.
-        </AlertDescription>
-        <Button className="mt-3" variant="outline" onClick={() => window.location.reload()}>
-          Retry
-        </Button>
-      </Alert>
     );
   }
 

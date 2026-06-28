@@ -10,10 +10,8 @@ import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { validatePassword } from "@/lib/password-validation";
-import { useUser, useAuth, useFirestore } from "@/firebase";
-import { EmailAuthProvider, reauthenticateWithCredential, updatePassword, signOut } from "firebase/auth";
-import { revokeAllSessions } from '@/app/actions/session';
-import { collection, query, doc, setDoc, deleteDoc, writeBatch, onSnapshot, serverTimestamp, orderBy } from "firebase/firestore";
+import { useUser, useAuth } from "@/firebase";
+import { apiFetch } from '@/lib/api-client';
 
 interface UserSession {
   id: string;
@@ -27,7 +25,6 @@ interface UserSession {
 export default function SecuritySettingsPage() {
   const { user } = useUser();
   const auth = useAuth();
-  const firestore = useFirestore();
   const { toast } = useToast();
   
   const [isUpdating, setIsUpdating] = useState(false);
@@ -39,74 +36,13 @@ export default function SecuritySettingsPage() {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const [sessions, setSessions] = useState<UserSession[]>([]);
-  const [isSessionsLoading, setIsSessionsLoading] = useState(true);
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-
-  // --- Session Tracking Logic ---
-  useEffect(() => {
-    if (!user || !firestore) return;
-
-    let sessionId = sessionStorage.getItem('studymate_session_id');
-    if (!sessionId) {
-      sessionId = `sess_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      sessionStorage.setItem('studymate_session_id', sessionId);
-    }
-    setCurrentSessionId(sessionId);
-
-    const ua = window.navigator.userAgent;
-    let browser = "Unknown Browser";
-    if (ua.includes("Chrome")) browser = "Chrome";
-    else if (ua.includes("Firefox")) browser = "Firefox";
-    else if (ua.includes("Safari")) browser = "Safari";
-    else if (ua.includes("Edge")) browser = "Edge";
-
-    let os = "Unknown OS";
-    if (ua.includes("Win")) os = "Windows PC";
-    else if (ua.includes("Mac")) os = "macOS";
-    else if (ua.includes("Linux")) os = "Linux";
-    else if (ua.includes("Android")) os = "Android Device";
-    else if (ua.includes("iPhone")) os = "iPhone";
-
-    const detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Unknown timezone';
-
-    const sessionRef = doc(firestore, 'users', user.uid, 'activeSessions', sessionId);
-    setDoc(sessionRef, {
-      id: sessionId,
-      deviceName: os,
-      browser: browser,
-      location: detectedTimezone,
-      lastActive: serverTimestamp(),
-    }, { merge: true });
-
-    const sessionsQuery = query(
-      collection(firestore, 'users', user.uid, 'activeSessions'),
-      orderBy('lastActive', 'desc')
-    );
-
-    const unsubscribe = onSnapshot(sessionsQuery, (snapshot) => {
-      const activeSessions = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          deviceName: data.deviceName,
-          browser: data.browser,
-          location: data.location,
-          lastActive: data.lastActive?.toDate() || new Date(),
-          isCurrent: doc.id === sessionId
-        } as UserSession;
-      });
-      setSessions(activeSessions);
-      setIsSessionsLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [user, firestore]);
+  const [sessions, _setSessions] = useState<UserSession[]>([]);
+  const [isSessionsLoading, setIsSessionsLoading] = useState(false);
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!user || !user.email) return;
+    if (!user) return;
 
     if (newPassword !== confirmPassword) {
         toast({
@@ -130,38 +66,32 @@ export default function SecuritySettingsPage() {
     setIsUpdating(true);
 
     try {
-        const credential = EmailAuthProvider.credential(user.email, currentPassword);
-        await reauthenticateWithCredential(user, credential);
-        await updatePassword(user, newPassword);
+      const { error } = await auth.updateUser({ password: newPassword });
+      if (error) throw error;
 
-        toast({
-            title: "Password Updated",
-            description: "Your account security has been strengthened successfully."
-        });
+      toast({
+          title: "Password Updated",
+          description: "Your account security has been strengthened successfully."
+      });
 
-        setCurrentPassword('');
-        setNewPassword('');
-        setConfirmPassword('');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
     } catch (error: any) {
         console.error("Password update error:", error);
-        let message = "An error occurred while updating your password.";
-        if (error.code === 'auth/wrong-password') {
-            message = "The current password you entered is incorrect.";
-        }
         toast({
             variant: "destructive",
             title: "Update Failed",
-            description: message
+            description: error?.message || "An error occurred while updating your password."
         });
     } finally {
         setIsUpdating(false);
     }
   };
 
-  const handleLogoutSession = async (sessionId: string) => {
-    if (!user || !firestore) return;
+  const handleLogoutSession = async (_sessionId: string) => {
     try {
-      await deleteDoc(doc(firestore, 'users', user.uid, 'activeSessions', sessionId));
+      await apiFetch('/session/revoke-all', { method: 'POST' });
       toast({ title: "Session Terminated", description: "The device has been logged out remotely." });
     } catch (error) {
       toast({ variant: "destructive", title: "Action Failed", description: "Could not terminate session." });
@@ -169,39 +99,16 @@ export default function SecuritySettingsPage() {
   };
 
   const handleLogoutOtherDevices = async () => {
-    if (!user || !firestore || !currentSessionId || !auth) return;
-
-    const otherSessions = sessions.filter(s => s.id !== currentSessionId);
-    if (otherSessions.length === 0) {
-      toast({ title: "No other sessions", description: "Your account is not logged in on any other devices." });
-      return;
-    }
+    if (!user || !auth) return;
 
     try {
-      // SECURITY: Revoke all Firebase refresh tokens server-side.
-      // This invalidates every active session including the current one.
-      const idToken = await user.getIdToken(true);
-      const result = await revokeAllSessions(idToken);
-      if ('error' in result) {
-        toast({ variant: "destructive", title: "Revocation Failed", description: result.error });
-        return;
-      }
-
-      // Remove Firestore session docs so the UI reflects the change immediately
-      const batch = writeBatch(firestore);
-      otherSessions.forEach(s => {
-        const ref = doc(firestore, 'users', user.uid, 'activeSessions', s.id);
-        batch.delete(ref);
-      });
-      await batch.commit();
+      const { error } = await auth.signOut();
+      if (error) throw error;
 
       toast({
         title: "All Sessions Revoked",
         description: "All devices have been signed out. You will be redirected to sign in again."
       });
-
-      // Sign out locally — revokeRefreshTokens invalidates the current session too
-      await signOut(auth);
     } catch (error) {
       toast({ variant: "destructive", title: "Action Failed", description: "Could not revoke sessions." });
     }

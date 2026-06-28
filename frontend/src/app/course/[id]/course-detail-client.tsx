@@ -41,9 +41,9 @@ import { getCourseById } from '@/lib/course-data';
 import { getCourseListingPrice } from '@/lib/course-pricing';
 import { getReviewsByCourseReference } from '@/lib/review-data';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useUser, useFirestore } from '@/firebase';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { useUser } from '@/firebase';
 import { resolveMediaUrl, resolveAvatarUrl } from '@/lib/media-url';
+import { apiFetch } from '@/lib/api-client';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { enrollFreeCourse } from '@/app/actions/payments';
@@ -95,7 +95,6 @@ export default function CourseDetailClient({
   const router = useRouter();
   const { addToCart } = useCart();
     const { user } = useUser();
-  const firestore = useFirestore();
     const { toast } = useToast();
 
   const [course, setCourse] = useState<Course | undefined | null>(undefined);
@@ -151,16 +150,13 @@ export default function CourseDetailClient({
   }, [courseId, user]);
 
   useEffect(() => {
-    if (user && firestore && courseId) {
-        const unsubscribe = onSnapshot(doc(firestore, 'users', user.uid), (snap) => {
-            if (snap.exists()) {
-                const profile = snap.data() as AppUser;
-                setIsEnrolled(profile.enrollments?.some(e => e.courseId === courseId) || false);
-            }
-        });
-        return () => unsubscribe();
+    if (user && courseId) {
+      apiFetch(`/enrollments/${courseId}`)
+        .then(res => res.ok ? res.json() : { enrolled: false })
+        .then(data => setIsEnrolled(data.enrolled === true))
+        .catch(() => setIsEnrolled(false));
     }
-  }, [user, firestore, courseId]);
+  }, [user, courseId]);
 
   useEffect(() => {
     if (user && reviews.length > 0) {

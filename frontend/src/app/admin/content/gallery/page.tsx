@@ -124,7 +124,7 @@ export default function AdminGalleryPage() {
   };
 
   const handleSave = async () => {
-    if (!editingItem.title.trim() || !editingItem.mediaUrl.trim()) {
+    if (!editingItem.title.trim() || !(editingItem.mediaUrl?.trim())) {
       toast({ variant: 'destructive', title: 'Title and media are required.' });
       return;
     }

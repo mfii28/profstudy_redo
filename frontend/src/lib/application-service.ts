@@ -1,10 +1,7 @@
 'use client';
 
-import { collection, doc, getDoc, getDocs, orderBy, query, setDoc, updateDoc, where } from 'firebase/firestore';
-import { db } from '@/firebase/firestore';
 import type { ContactInquiry, InstructorApplication } from './db';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
+import { apiFetch } from '@/lib/api-client';
 import { z } from 'zod';
 
 const ContactInquirySchema = z.object({
@@ -27,14 +24,13 @@ const InstructorApplicationSchema = z.object({
 
 /**
  * @fileOverview Standardized service for public form applications.
+ * Routes through the Python backend REST API.
  */
 
 /**
- * Submits a new contact inquiry to Firestore.
+ * Submits a new contact inquiry.
  */
 export const submitContactInquiry = async (inquiry: Omit<ContactInquiry, 'id' | 'status' | 'submittedAt'>): Promise<void> => {
-  if (!db) return;
-
   const parsed = ContactInquirySchema.safeParse(inquiry);
   if (!parsed.success) {
     const error = new Error('Invalid contact inquiry payload.');
@@ -42,36 +38,17 @@ export const submitContactInquiry = async (inquiry: Omit<ContactInquiry, 'id' | 
     throw error;
   }
 
-  const inquiryId = `inq-${Date.now()}`;
-  const docRef = doc(db, 'contactInquiries', inquiryId);
-  
-  const data: ContactInquiry = {
-    ...parsed.data,
-    id: inquiryId,
-    status: 'Pending',
-    submittedAt: new Date().toISOString()
-  };
-
-  try {
-    await setDoc(docRef, data);
-  } catch (error) {
-    console.error("[ApplicationService] Contact submission failed:", error);
-    const permissionError = new FirestorePermissionError({
-      path: docRef.path,
-      operation: 'create',
-      requestResourceData: data,
-    } satisfies SecurityRuleContext);
-    errorEmitter.emit('permission-error', permissionError);
-    throw error;
-  }
+  const res = await apiFetch('/contact-inquiries', {
+    method: 'POST',
+    body: JSON.stringify(parsed.data),
+  });
+  if (!res.ok) throw new Error('Failed to submit contact inquiry');
 };
 
 /**
- * Submits a new instructor application to Firestore.
+ * Submits a new instructor application.
  */
 export const submitInstructorApplication = async (application: Omit<InstructorApplication, 'id' | 'status' | 'submittedAt'>): Promise<void> => {
-  if (!db) return;
-
   const parsed = InstructorApplicationSchema.safeParse(application);
   if (!parsed.success) {
     const error = new Error('Invalid instructor application payload.');
@@ -79,42 +56,23 @@ export const submitInstructorApplication = async (application: Omit<InstructorAp
     throw error;
   }
 
-  const appId = `app-${Date.now()}`;
-  const docRef = doc(db, 'instructorApplications', appId);
-  
-  const data: InstructorApplication = {
-    ...parsed.data,
-    id: appId,
-    status: 'Pending',
-    submittedAt: new Date().toISOString(),
-    reviewerId: undefined,
-    reviewedAt: undefined,
-    adminFeedback: undefined,
-  };
-
-  try {
-    await setDoc(docRef, data);
-  } catch (error) {
-    console.error("[ApplicationService] Instructor submission failed:", error);
-    const permissionError = new FirestorePermissionError({
-      path: docRef.path,
-      operation: 'create',
-      requestResourceData: data,
-    } satisfies SecurityRuleContext);
-    errorEmitter.emit('permission-error', permissionError);
-    throw error;
-  }
+  const res = await apiFetch('/instructor-applications', {
+    method: 'POST',
+    body: JSON.stringify(parsed.data),
+  });
+  if (!res.ok) throw new Error('Failed to submit instructor application');
 };
 
 // ---------------------------------------------------------------------------
-// Admin reader functions (require admin role — enforced by Firestore rules)
+// Admin reader functions
 // ---------------------------------------------------------------------------
 
 export const getContactInquiries = async (): Promise<ContactInquiry[]> => {
-  if (!db) return [];
   try {
-    const snap = await getDocs(query(collection(db, 'contactInquiries'), orderBy('submittedAt', 'desc')));
-    return snap.docs.map(d => d.data() as ContactInquiry);
+    const res = await apiFetch('/admin/contact-inquiries');
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.inquiries || [];
   } catch (error) {
     console.error('[ApplicationService] Failed to fetch contact inquiries:', error);
     return [];
@@ -126,19 +84,19 @@ export const updateContactInquiryStatus = async (
   status: ContactInquiry['status'],
   adminNotes?: string
 ): Promise<void> => {
-  if (!db) return;
-  const ref = doc(db, 'contactInquiries', id);
-  const updates: Record<string, any> = { status };
-  if (adminNotes !== undefined) updates.adminNotes = adminNotes;
-  if (status === 'Resolved') updates.resolvedAt = new Date().toISOString();
-  await updateDoc(ref, updates);
+  const res = await apiFetch(`/admin/contact-inquiries/${id}/status`, {
+    method: 'PUT',
+    body: JSON.stringify({ status, adminNotes }),
+  });
+  if (!res.ok) throw new Error('Failed to update contact inquiry status');
 };
 
 export const getInstructorApplications = async (): Promise<InstructorApplication[]> => {
-  if (!db) return [];
   try {
-    const snap = await getDocs(query(collection(db, 'instructorApplications'), orderBy('submittedAt', 'desc')));
-    return snap.docs.map(d => d.data() as InstructorApplication);
+    const res = await apiFetch('/admin/instructor-applications');
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.applications || [];
   } catch (error) {
     console.error('[ApplicationService] Failed to fetch instructor applications:', error);
     return [];
@@ -151,37 +109,9 @@ export const updateInstructorApplicationStatus = async (
   reviewerId: string,
   adminFeedback?: string
 ): Promise<void> => {
-  if (!db) return;
-  const ref = doc(db, 'instructorApplications', id);
-
-  const applicationSnap = await getDoc(ref);
-  const applicationData = applicationSnap.exists() ? (applicationSnap.data() as InstructorApplication) : null;
-
-  await updateDoc(ref, {
-    status,
-    reviewerId,
-    reviewedAt: new Date().toISOString(),
-    ...(adminFeedback !== undefined ? { adminFeedback } : {}),
+  const res = await apiFetch(`/admin/instructor-applications/${id}/status`, {
+    method: 'PUT',
+    body: JSON.stringify({ status, reviewerId, adminFeedback }),
   });
-
-  // Keep tutor verification workflow and application workflow in sync on approval.
-  if (status === 'Approved' && applicationData) {
-    if (applicationData.applicantId) {
-      await updateDoc(doc(db, 'users', applicationData.applicantId), {
-        role: 'tutor',
-        'tutorDetails.verificationStatus': 'verified',
-      });
-      return;
-    }
-
-    const byEmailSnap = await getDocs(
-      query(collection(db, 'users'), where('email', '==', applicationData.email))
-    );
-    if (!byEmailSnap.empty) {
-      await updateDoc(byEmailSnap.docs[0].ref, {
-        role: 'tutor',
-        'tutorDetails.verificationStatus': 'verified',
-      });
-    }
-  }
+  if (!res.ok) throw new Error('Failed to update application status');
 };

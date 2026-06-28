@@ -1,8 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
-import { db } from '@/firebase/firestore';
+import { apiFetch } from '@/lib/api-client';
 import { motion } from 'framer-motion';
 
 interface PresenceUser {
@@ -22,23 +21,29 @@ export function PresenceIndicator({ classroomId, members = [] }: PresenceIndicat
   const [onlineUsers, setOnlineUsers] = useState<PresenceUser[]>([]);
 
   useEffect(() => {
-    if (!db || !classroomId) return;
+    if (!classroomId) return;
 
-    const q = query(
-      collection(db, 'classroomPresence'),
-      where('classroomId', '==', classroomId)
-    );
+    let cancelled = false;
+    const fetchPresence = async () => {
+      try {
+        const res = await apiFetch(`/classroom-presence/${classroomId}`);
+        if (cancelled) return;
+        if (res.ok) {
+          const data = await res.json();
+          setOnlineUsers(data.users || []);
+        }
+      } catch {
+        // ignore
+      }
+    };
 
-    const unsub = onSnapshot(q, (snap) => {
-      const users = snap.docs.map((doc) => ({
-        ...doc.data(),
-        userId: doc.data().userId,
-      })) as PresenceUser[];
+    fetchPresence();
+    const interval = setInterval(fetchPresence, 15000);
 
-      setOnlineUsers(users);
-    });
-
-    return () => unsub();
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [classroomId]);
 
   const getStatusColor = (status: string) => {

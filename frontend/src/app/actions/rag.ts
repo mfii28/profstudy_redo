@@ -104,7 +104,7 @@ export async function retrieveCourseChunksForStudent(
   query: string,
   topK = 5,
   idToken?: string,
-) {
+): Promise<RetrievedChunk[]> {
   try {
     const apiUrl = `${API_URL}/rag/course/${courseId}/retrieve`;
     const response = await fetch(apiUrl, {
@@ -116,28 +116,16 @@ export async function retrieveCourseChunksForStudent(
       body: JSON.stringify({ query, top_k: topK }),
     });
     if (!response.ok) {
-      // Fallback: get raw markdown text
-      const markdownText = await getCourseMarkdownText(courseId, idToken);
-      if (!markdownText) return [];
-      return [{
-        text: markdownText,
-        docName: 'Course materials (Combined)',
-        chunkIndex: 0,
-        score: 1.0,
-      }];
+      return [];
     }
-    return await response.json();
+    const data = await response.json();
+    if (data.chunks && Array.isArray(data.chunks)) {
+      return data.chunks as RetrievedChunk[];
+    }
+    return [];
   } catch (error) {
     console.error('[RAG Proxy] Failed to retrieve chunks:', error);
-    // Fallback
-    const markdownText = await getCourseMarkdownText(courseId, idToken);
-    if (!markdownText) return [];
-    return [{
-      text: markdownText,
-      docName: 'Course materials (Combined)',
-      chunkIndex: 0,
-      score: 1.0,
-    }];
+    return [];
   }
 }
 

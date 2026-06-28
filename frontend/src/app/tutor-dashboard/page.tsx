@@ -6,14 +6,14 @@ import { isQuotaError } from '@/lib/service-errors';
 import { reportQuotaError } from '@/lib/feedback/quota-state';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { useUser, useFirestore } from '@/firebase';
+import { useUser } from '@/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { type User as UserProfile } from '@/lib/db';
 import { formatDistanceToNow } from 'date-fns';
-import { doc, getDoc } from 'firebase/firestore';
+import { apiFetch } from '@/lib/api-client';
 import { useTutorCourses } from '@/hooks/use-tutor-courses';
 import { useTutorStudents } from '@/hooks/use-tutor-students';
 
@@ -44,7 +44,6 @@ function StatCard({ icon, title, value, description }: { icon: React.ReactNode, 
 
 export default function TutorDashboard() {
     const { user: tutorAuth, isLoading: isAuthLoading } = useUser();
-    const firestore = useFirestore();
     const { courses, isLoading: isCoursesLoading } = useTutorCourses();
     const { allStudents, isLoading: isStudentsLoading } = useTutorStudents();
     const [tutorProfile, setTutorProfile] = useState<UserProfile | null>(null);
@@ -56,18 +55,19 @@ export default function TutorDashboard() {
 
     const fetchTutorProfile = useCallback(async () => {
         if (!tutorAuth) return;
-        if (!firestore) {
-          setLoadError('Your profile is still loading. Please wait a moment and retry.');
-          setIsDataLoading(false);
-          return;
-        }
         setIsDataLoading(true);
         setLoadError(null);
         try {
-          const tutorDocRef = doc(firestore, 'users', tutorAuth.uid);
-          const tutorDocSnap = await getDoc(tutorDocRef);
-          if (tutorDocSnap.exists()) {
-            setTutorProfile(tutorDocSnap.data() as UserProfile);
+          const res = await apiFetch('/users/profile');
+          if (res.ok) {
+            const data = await res.json();
+            const profile = data.user as UserProfile;
+            setTutorProfile(profile || {
+              id: tutorAuth.uid,
+              name: tutorAuth.displayName || 'Instructor',
+              email: tutorAuth.email || '',
+              role: 'tutor',
+            } as UserProfile);
           } else {
             setTutorProfile({
               id: tutorAuth.uid,
@@ -83,7 +83,7 @@ export default function TutorDashboard() {
             }
         }
         setIsDataLoading(false);
-      }, [tutorAuth, firestore]);
+      }, [tutorAuth]);
     
     useEffect(() => {
         if (!tutorProfile) return;

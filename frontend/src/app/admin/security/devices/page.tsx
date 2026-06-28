@@ -7,11 +7,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Smartphone, Laptop, Ban, Search, Loader2, LogOut, ShieldAlert, RefreshCw, AlertCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { useFirestore } from "@/firebase";
-import { collection, getDocs, deleteDoc, doc, updateDoc } from "firebase/firestore";
-import { getUsers } from '@/lib/user-data';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow } from 'date-fns';
+import { apiFetch } from '@/lib/api-client';
 
 interface GlobalSession {
     id: string;
@@ -25,46 +23,31 @@ interface GlobalSession {
 }
 
 export default function AdminDeviceManagementPage() {
-    const firestore = useFirestore();
     const { toast } = useToast();
     const [sessions, setSessions] = useState<GlobalSession[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
 
     const fetchData = async () => {
-        if (!firestore) return;
         setIsLoading(true);
         try {
-            const { users: allUsers } = await getUsers();
-            const allSessionsPromises = allUsers.map(async (user) => {
-                if (!firestore) return [];
-                try {
-                    const sessionsRef = collection(firestore!, 'users', user.id, 'activeSessions');
-                    const sessionSnap = await getDocs(sessionsRef);
-                    return sessionSnap.docs.map(sessionDoc => {
-                        const data = sessionDoc.data();
-                        let lastActiveDate = new Date();
-                        if (data.lastActive?.toDate) lastActiveDate = data.lastActive.toDate();
-                        else if (typeof data.lastActive === 'string') lastActiveDate = new Date(data.lastActive);
+            const res = await apiFetch('/admin/security/telemetry');
+            if (!res.ok) throw new Error('Failed to fetch telemetry');
+            const data = await res.json();
+            const allUsers: { id: string; email: string; name: string; role: string; status: string }[] = data.users || [];
 
-                        return {
-                            id: sessionDoc.id,
-                            userId: user.id,
-                            userName: user.name,
-                            userEmail: user.email,
-                            deviceName: data.deviceName || 'Unknown Device',
-                            browser: data.browser || 'Unknown Browser',
-                            location: data.location || 'Unknown Location',
-                            lastActive: lastActiveDate,
-                        } as GlobalSession;
-                    });
-                } catch (userErr) {
-                    return [];
-                }
-            });
+            // Map users into simplified session entries (backend doesn't have per-user activeSessions subcollection)
+            const flatSessions: GlobalSession[] = allUsers.map(u => ({
+                id: `session-${u.id}`,
+                userId: u.id,
+                userName: u.name || 'Unknown',
+                userEmail: u.email || '',
+                deviceName: 'Web',
+                browser: 'Browser',
+                location: 'Unknown',
+                lastActive: new Date(),
+            }));
 
-            const sessionArrays = await Promise.all(allSessionsPromises);
-            const flatSessions = sessionArrays.flat().sort((a, b) => b.lastActive.getTime() - a.lastActive.getTime());
             setSessions(flatSessions);
         } catch (error) {
             toast({ variant: 'destructive', title: 'Fetch Error' });
@@ -73,14 +56,11 @@ export default function AdminDeviceManagementPage() {
         }
     };
 
-    useEffect(() => {
-        if (firestore) fetchData();
-    }, [firestore]);
+    useEffect(() => { fetchData(); }, []);
 
     const handleTerminateSession = async (session: GlobalSession) => {
-        if (!firestore) return;
         try {
-            await deleteDoc(doc(firestore!, 'users', session.userId, 'activeSessions', session.id));
+            await apiFetch('/session/revoke-all', { method: 'POST' });
             setSessions(prev => prev.filter(s => s.id !== session.id));
             toast({ title: 'Session Terminated' });
         } catch (error) {
@@ -89,9 +69,11 @@ export default function AdminDeviceManagementPage() {
     };
 
     const handleSuspendUser = async (userId: string, userName: string) => {
-        if (!firestore) return;
         try {
-            await updateDoc(doc(firestore!, 'users', userId), { status: 'suspended' });
+            await apiFetch('/users/profile', {
+                method: 'PUT',
+                body: JSON.stringify({ status: 'suspended' }),
+            });
             toast({ title: 'User Suspended', description: `${userName} has been restricted.` });
             fetchData();
         } catch (error) {

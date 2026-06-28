@@ -1,15 +1,14 @@
 'use client';
 
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
-import { db } from '@/firebase/firestore';
+import { apiFetch } from '@/lib/api-client';
 import type { Tag } from './db';
 
 export const getTags = async (): Promise<Tag[]> => {
-  if (!db) return [];
   try {
-    const q = query(collection(db, 'tags'), orderBy('createdAt', 'desc'));
-    const snap = await getDocs(q);
-    return snap.docs.map(d => ({ id: d.id, ...d.data() } as Tag));
+    const res = await apiFetch('/admin/tags');
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.tags || [];
   } catch (err) {
     console.error('[TagsData] fetch error:', err);
     return [];
@@ -17,20 +16,26 @@ export const getTags = async (): Promise<Tag[]> => {
 };
 
 export const saveTag = async (tag: Omit<Tag, 'id'> & { id?: string }): Promise<string> => {
-  if (!db) throw new Error('Database unavailable');
-  const now = new Date().toISOString();
   if (tag.id) {
-    const { id, ...data } = tag;
-    await updateDoc(doc(db, 'tags', id), data);
-    return id;
+    const res = await apiFetch(`/admin/tags/${tag.id}`, {
+      method: 'PUT',
+      body: JSON.stringify(tag),
+    });
+    if (!res.ok) throw new Error('Failed to update tag');
+    return tag.id;
   }
-  const ref = await addDoc(collection(db, 'tags'), { ...tag, createdAt: now });
-  return ref.id;
+  const res = await apiFetch('/admin/tags', {
+    method: 'POST',
+    body: JSON.stringify(tag),
+  });
+  if (!res.ok) throw new Error('Failed to create tag');
+  const data = await res.json();
+  return data.id;
 };
 
 export const removeTag = async (id: string): Promise<void> => {
-  if (!db) throw new Error('Database unavailable');
-  await deleteDoc(doc(db, 'tags', id));
+  const res = await apiFetch(`/admin/tags/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to delete tag');
 };
 
 export const toSlug = (name: string): string =>
