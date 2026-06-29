@@ -130,14 +130,37 @@ async def backfill_enrollment_index(
     users = all_users.scalars().all()
 
     scanned = 0
+    already_enrolled = 0
     added = 0
     for user in users:
         scanned += 1
         enrollments = user.enrollments or []
         if any(e.get("courseId") == course_id for e in enrollments):
-            added += 1
-        elif not any(e.get("courseId") == course_id for e in enrollments):
-            # Check if we need to add - skip
-            pass
+            already_enrolled += 1
+            continue
 
-    return {"scannedUsers": scanned, "added": added}
+        # User has an Order for this course but no enrollment - fix it
+        from app.models.models import Order
+        order_check = await db.execute(
+            select(Order).where(
+                Order.userId == user.id,
+                Order.reference == course_id,  # Match by course context
+            )
+        )
+        has_order = order_check.scalar_one_or_none() is not None
+        if has_order:
+            enrollments.append({
+                "courseId": course_id,
+                "enrolledDate": datetime.utcnow().isoformat(),
+                "source": "backfill",
+                "progress": 0,
+                "completedLessons": [],
+            })
+            user.enrollments = enrollments
+            user.updatedAt = datetime.utcnow()
+            added += 1
+
+    if added > 0:
+        await db.flush()
+
+    return {"scannedUsers": scanned, "alreadyEnrolled": already_enrolled, "added": added}

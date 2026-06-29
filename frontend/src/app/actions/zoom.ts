@@ -351,23 +351,11 @@ async function notifyEnrolledStudentsOfLiveSession(input: LiveSessionNotificatio
 
   // Query users enrolled in this course in batches (Firestore array-contains limit)
   const BATCH_SIZE = 100;
-  let lastDoc: FirebaseFirestore.QueryDocumentSnapshot | undefined;
+  let lastIndexDoc: any;
   let totalSent = 0;
   const MAX_RECIPIENTS = 500; // safety cap per session
 
-  while (totalSent < MAX_RECIPIENTS) {
-    let query = adminDb
-      .collection('users')
-      .where('enrollments', 'array-contains-any', [{ courseId: input.courseId }])
-      .limit(BATCH_SIZE);
-
-    // Firestore enrollments is an array of Enrollment objects, so array-contains-any won't work
-    // directly. Use the enrollmentIndex sub-collection instead.
-    break; // See below — we use enrollmentIndex
-  }
-
   // Use the enrollmentIndex collection: enrollmentIndex/{courseId}/users/{userId}
-  let lastIndexDoc: FirebaseFirestore.QueryDocumentSnapshot | undefined;
 
   while (totalSent < MAX_RECIPIENTS) {
     let indexQuery = adminDb

@@ -197,6 +197,22 @@ class CollectionQuery {
         take: this.limitCount
       });
       docs = notifications;
+    } else if (this.collectionName.includes('/')) {
+      // Handle subcollection paths (e.g., "courseEnrollments/courseId/members")
+      const parts = this.collectionName.split('/');
+      const parentCollection = parts[0];
+      const parentId = parts[1];
+      const settingsKey = `sub_${parentCollection}_${parentId}`;
+      const settingsRow = await prisma.platformSettings.findUnique({
+        where: { id: settingsKey }
+      });
+      if (settingsRow?.settings) {
+        const subDocs = settingsRow.settings as Record<string, any>;
+        docs = Object.entries(subDocs).map(([key, val]) => ({
+          id: key,
+          ...(typeof val === 'object' ? val : { value: val }),
+        }));
+      }
     }
     
     return {
@@ -213,16 +229,59 @@ class CollectionQuery {
 
 export const adminDb = {
   doc: (path: string) => {
-    const [collectionName, id] = path.split('/');
+    const parts = path.split('/');
+    const collectionName = parts[0];
+    const id = parts[1];
+    const subPath = parts.slice(2).join('/'); // e.g., "members/user456"
+
     return {
       get: async () => {
         let data: any = null;
+
+        // Handle subcollection paths
+        if (subPath) {
+          // subcollection docs stored in platform settings keyed by parent path
+          const settingsKey = `sub_${collectionName}_${id}`;
+          const settingsRow = await prisma.platformSettings.findUnique({
+            where: { id: settingsKey }
+          });
+          const subDocs = (settingsRow?.settings as any) || {};
+          data = subDocs[subPath] || null;
+          return {
+            exists: !!data,
+            data: () => data,
+            id: subPath,
+          };
+        }
+
         if (collectionName === 'users') {
           data = await prisma.user.findUnique({ where: { id } });
         } else if (collectionName === 'courses') {
           data = await prisma.course.findUnique({ where: { id } });
         } else if (collectionName === 'books') {
           data = await prisma.book.findUnique({ where: { id } });
+        } else if (collectionName === 'bookPurchases') {
+          data = await prisma.bookPurchase.findUnique({ where: { id } });
+        } else if (collectionName === 'bookReaderSessions') {
+          data = null; // Stored in subcollection path — handled above if subPath present
+        } else if (collectionName === 'orders') {
+          data = await prisma.order.findUnique({ where: { id } });
+        } else if (collectionName === 'paymentIntents') {
+          data = null; // Placeholder — not a real table
+        } else if (collectionName === 'paymentFulfillments') {
+          data = null;
+        } else if (collectionName === 'affiliateDiscountUses') {
+          data = null;
+        } else if (collectionName === 'affiliateReferralRewards') {
+          data = null;
+        } else if (collectionName === 'auditLogs') {
+          const settingsRow = await prisma.platformSettings.findUnique({
+            where: { id: 'audit-logs' }
+          });
+          if (settingsRow?.settings) {
+            const logs = (settingsRow.settings as any[]) || [];
+            data = logs.find((l: any) => l.id === id) || null;
+          }
         } else if (collectionName === 'emailOtps') {
           const user = await prisma.user.findUnique({ where: { id } });
           if (user && user.otpHash) {
@@ -237,10 +296,7 @@ export const adminDb = {
         } else if (collectionName === 'classrooms') {
           data = await prisma.classroom.findUnique({ where: { id } });
           if (data) {
-            data = {
-              ...data,
-              courseId: data.id
-            };
+            data = { ...data, courseId: data.id };
           }
         } else if (collectionName === 'classroomMessages') {
           data = await prisma.classroomMessage.findUnique({ where: { id } });
@@ -251,10 +307,7 @@ export const adminDb = {
         } else if (collectionName === 'liveClassUrls') {
           const liveClass = await prisma.liveClass.findUnique({ where: { id } });
           if (liveClass) {
-            data = {
-              joinUrl: liveClass.joinUrl,
-              meetingId: liveClass.meetingId
-            };
+            data = { joinUrl: liveClass.joinUrl, meetingId: liveClass.meetingId };
           }
         } else if (collectionName === 'notifications') {
           data = await prisma.notification.findUnique({ where: { id } });
@@ -276,6 +329,22 @@ export const adminDb = {
       set: async (payload: any, options?: any) => {
         const cleanedPayload = { ...payload };
         delete cleanedPayload.id;
+
+        // Handle subcollection writes
+        if (subPath) {
+          const settingsKey = `sub_${collectionName}_${id}`;
+          const settingsRow = await prisma.platformSettings.findUnique({
+            where: { id: settingsKey }
+          });
+          const subDocs = (settingsRow?.settings as any) || {};
+          subDocs[subPath] = { ...payload, updatedAt: new Date().toISOString() };
+          await prisma.platformSettings.upsert({
+            where: { id: settingsKey },
+            update: { settings: subDocs },
+            create: { id: settingsKey, settings: subDocs }
+          });
+          return;
+        }
 
         if (collectionName === 'users') {
           await prisma.user.upsert({
@@ -565,6 +634,10 @@ export const adminDb = {
             });
           }
         }
+      },
+      collection: (subcollectionName: string) => {
+        const fullSubPath = `${collectionName}/${id}/${subcollectionName}`;
+        return new CollectionQuery(fullSubPath);
       }
     };
   },
@@ -661,4 +734,6 @@ export const FieldValue = {
   serverTimestamp: () => new Date(),
   arrayUnion: (...args: any[]) => args,
   arrayRemove: (...args: any[]) => args,
+  increment: (n: number) => n,
+  delete: () => undefined,
 } as any;

@@ -31,6 +31,8 @@ from app.api.v1.endpoints.books import router as books_router
 from app.api.v1.endpoints.checkout import router as checkout_router
 from app.api.v1.endpoints.tutor import router as tutor_router
 from app.api.v1.endpoints.session import router as session_router
+from app.api.v1.endpoints.analytics import router as analytics_router
+from app.api.v1.endpoints.achievements import router as achievements_router
 
 api_v1_router.include_router(storage_router, prefix="/storage", tags=["storage"])
 api_v1_router.include_router(payments_router, prefix="/payments", tags=["payments"])
@@ -53,3 +55,5 @@ api_v1_router.include_router(books_router, prefix="/books", tags=["books"])
 api_v1_router.include_router(checkout_router, prefix="/checkout", tags=["checkout"])
 api_v1_router.include_router(tutor_router, prefix="/tutor", tags=["tutor"])
 api_v1_router.include_router(session_router, prefix="/session", tags=["session"])
+api_v1_router.include_router(analytics_router, prefix="/analytics", tags=["analytics"])
+api_v1_router.include_router(achievements_router, prefix="/achievements", tags=["achievements"])

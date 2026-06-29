@@ -35,6 +35,58 @@ async def get_analytics_overview(
     courses_count = (await db.execute(select(func.count(Course.id)))).scalar() or 0
     orders_count = (await db.execute(select(func.count(Order.id)))).scalar() or 0
 
+    # Calculate real revenue from orders
+    revenue_result = await db.execute(select(func.coalesce(func.sum(Order.amount), 0)))
+    total_revenue = revenue_result.scalar() or 0
+
+    # Recent orders for trend data (last 30 days)
+    from datetime import timedelta
+    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+    trend_orders = await db.execute(
+        select(Order).where(Order.createdAt >= thirty_days_ago).order_by(Order.createdAt.asc())
+    )
+    trend_orders_list = trend_orders.scalars().all()
+
+    # Build daily trend data
+    trend_by_day = {}
+    for o in trend_orders_list:
+        day = o.createdAt.strftime("%Y-%m-%d") if o.createdAt else datetime.utcnow().strftime("%Y-%m-%d")
+        trend_by_day[day] = trend_by_day.get(day, 0) + (o.amount or 0)
+
+    trend_data = [{"date": d, "revenue": v} for d, v in sorted(trend_by_day.items())]
+
+    # Calculate real enrollment counts from User JSONB
+    all_users_result = await db.execute(select(User.id, User.enrollments))
+    all_users = all_users_result.all()
+    total_enrollments = 0
+    for u in all_users:
+        if u.enrollments:
+            if isinstance(u.enrollments, dict):
+                total_enrollments += len(u.enrollments)
+            elif isinstance(u.enrollments, list):
+                total_enrollments += len(u.enrollments)
+
+    # Calculate retention: users who enrolled in >1 course / total enrolled users
+    enrolled_users = 0
+    multi_course_users = 0
+    for u in all_users:
+        if u.enrollments:
+            count = 0
+            if isinstance(u.enrollments, dict):
+                count = len(u.enrollments)
+            elif isinstance(u.enrollments, list):
+                count = len(u.enrollments)
+            if count > 0:
+                enrolled_users += 1
+            if count > 1:
+                multi_course_users += 1
+    retention_rate = round((multi_course_users / enrolled_users * 100)) if enrolled_users > 0 else 0
+
+    # Count users with premium subscriptions
+    premium_count = (await db.execute(
+        select(func.count(User.id)).where(User.isPremium == True)
+    )).scalar() or 0
+
     # Recent reviews
     reviews_result = await db.execute(
         select(Review).order_by(Review.createdAt.desc()).limit(5)
@@ -43,10 +95,13 @@ async def get_analytics_overview(
 
     return {
         "activeUsers": users_count,
-        "avgEngagement": 65,
-        "totalSubscriptions": 0,
-        "retentionRate": 72,
-        "trendData": [],
+        "totalCourses": courses_count,
+        "totalEnrollments": total_enrollments,
+        "totalRevenue": total_revenue,
+        "totalOrders": orders_count,
+        "totalSubscriptions": premium_count,
+        "retentionRate": retention_rate,
+        "trendData": trend_data,
         "recentReviews": [
             {"id": r.id, "userId": r.userId, "courseId": r.courseId,
              "rating": r.rating, "comment": r.comment, "createdAt": r.createdAt.isoformat() if r.createdAt else None}
@@ -69,6 +124,10 @@ async def get_dashboard_stats(
     total_reviews = (await db.execute(select(func.count(Review.id)))).scalar() or 0
     total_books = (await db.execute(select(func.count(Book.id)))).scalar() or 0
 
+    # Calculate real revenue
+    revenue_result = await db.execute(select(func.coalesce(func.sum(Order.amount), 0)))
+    total_revenue = revenue_result.scalar() or 0
+
     # Pending tutor approvals
     pending_tutors = await db.execute(
         select(func.count(User.id)).where(User.role == "tutor", User.tutorApproved == False)
@@ -77,7 +136,7 @@ async def get_dashboard_stats(
     return {
         "totalUsers": total_users,
         "totalCourses": total_courses,
-        "totalRevenue": 0,
+        "totalRevenue": total_revenue,
         "pendingApprovals": pending_tutors.scalar() or 0,
         "totalBooks": total_books,
         "totalReviews": total_reviews,
@@ -233,7 +292,51 @@ async def record_manual_payment(
 
     now = datetime.utcnow()
     payment_id = f"pmt-{int(now.timestamp())}-{random.randint(1000, 9999)}"
-    return {"success": True, "paymentId": payment_id, "totalAmount": data.get("amount", 0)}
+    amount = data.get("amount", 0)
+    user_id = data.get("userId")
+    course_id = data.get("courseId")
+
+    if not user_id:
+        raise HTTPException(status_code=400, detail="userId is required")
+
+    # Create an Order record
+    order = Order(
+        id=payment_id,
+        userId=user_id,
+        amount=amount,
+        status="completed",
+        reference=data.get("reference", f"manual-{payment_id}"),
+        createdAt=now,
+    )
+    db.add(order)
+
+    # If courseId provided, also enroll the user
+    if course_id:
+        user_result = await db.execute(select(User).where(User.id == user_id))
+        user = user_result.scalar_one_or_none()
+        if user:
+            enrollments = user.enrollments or []
+            if isinstance(enrollments, dict):
+                enrollments[course_id] = {
+                    "courseId": course_id,
+                    "enrolledDate": now.isoformat(),
+                    "source": "admin_manual_payment",
+                    "progress": 0,
+                    "completedLessons": [],
+                }
+            elif isinstance(enrollments, list):
+                enrollments.append({
+                    "courseId": course_id,
+                    "enrolledDate": now.isoformat(),
+                    "source": "admin_manual_payment",
+                    "progress": 0,
+                    "completedLessons": [],
+                })
+            user.enrollments = enrollments
+            user.updatedAt = now
+
+    await db.flush()
+    return {"success": True, "paymentId": payment_id, "totalAmount": amount}
 
 
 @router.post("/ip-blocklist")
@@ -355,5 +458,236 @@ async def delete_coupon(
     if not coupon:
         raise HTTPException(status_code=404, detail="Coupon not found")
     await db.delete(coupon)
+    await db.flush()
+    return {"success": True}
+
+
+# ---------------------------------------------------------------------------
+# Email Templates
+# ---------------------------------------------------------------------------
+@router.get("/email-templates")
+async def list_email_templates(
+    current_user: Dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all email templates (admin only)."""
+    _require_admin(current_user)
+    result = await db.execute(
+        select(PlatformSettings).where(PlatformSettings.id == "email-templates")
+    )
+    row = result.scalar_one_or_none()
+    templates = row.settings if row and row.settings else {}
+    return {"templates": templates}
+
+
+@router.put("/email-templates/{key:path}")
+async def update_email_template(
+    key: str,
+    data: Dict,
+    current_user: Dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update a single email template (admin only)."""
+    _require_admin(current_user)
+    result = await db.execute(
+        select(PlatformSettings).where(PlatformSettings.id == "email-templates")
+    )
+    row = result.scalar_one_or_none()
+    templates = dict(row.settings) if row and row.settings else {}
+    templates[key] = data
+    if row:
+        row.settings = templates
+    else:
+        db.add(PlatformSettings(id="email-templates", settings=templates))
+    await db.flush()
+    return {"success": True}
+
+
+# ---------------------------------------------------------------------------
+# Communication Templates
+# ---------------------------------------------------------------------------
+@router.get("/communication-templates")
+async def list_communication_templates(
+    current_user: Dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all communication templates (admin only)."""
+    _require_admin(current_user)
+    result = await db.execute(
+        select(PlatformSettings).where(PlatformSettings.id == "communication-templates")
+    )
+    row = result.scalar_one_or_none()
+    templates = row.settings if row and row.settings else {}
+    return {"templates": templates}
+
+
+@router.put("/communication-templates/{key:path}")
+async def update_communication_template(
+    key: str,
+    data: Dict,
+    current_user: Dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update a single communication template (admin only)."""
+    _require_admin(current_user)
+    result = await db.execute(
+        select(PlatformSettings).where(PlatformSettings.id == "communication-templates")
+    )
+    row = result.scalar_one_or_none()
+    templates = dict(row.settings) if row and row.settings else {}
+    templates[key] = data
+    if row:
+        row.settings = templates
+    else:
+        db.add(PlatformSettings(id="communication-templates", settings=templates))
+    await db.flush()
+    return {"success": True}
+
+
+# ---------------------------------------------------------------------------
+# Affiliates (stored as platform settings)
+# ---------------------------------------------------------------------------
+AFFILIATES_KEY = "affiliates"
+
+
+@router.get("/affiliates")
+async def list_affiliates(
+    current_user: Dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all affiliates (admin only)."""
+    _require_admin(current_user)
+    result = await db.execute(
+        select(PlatformSettings).where(PlatformSettings.id == AFFILIATES_KEY)
+    )
+    row = result.scalar_one_or_none()
+    affiliates = row.settings if row and row.settings else []
+    return {"affiliates": affiliates}
+
+
+@router.post("/affiliates")
+async def create_affiliate(
+    data: Dict,
+    current_user: Dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a new affiliate (admin only)."""
+    _require_admin(current_user)
+    result = await db.execute(
+        select(PlatformSettings).where(PlatformSettings.id == AFFILIATES_KEY)
+    )
+    row = result.scalar_one_or_none()
+    affiliates = list(row.settings) if row and row.settings else []
+    affiliate = {**data, "id": data.get("id", f"aff_{len(affiliates)+1}")}
+    affiliates.append(affiliate)
+    if row:
+        row.settings = affiliates
+    else:
+        db.add(PlatformSettings(id=AFFILIATES_KEY, settings=affiliates))
+    await db.flush()
+    return {"affiliate": affiliate}
+
+
+@router.delete("/affiliates/{affiliate_id}")
+async def delete_affiliate(
+    affiliate_id: str,
+    current_user: Dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete an affiliate (admin only)."""
+    _require_admin(current_user)
+    result = await db.execute(
+        select(PlatformSettings).where(PlatformSettings.id == AFFILIATES_KEY)
+    )
+    row = result.scalar_one_or_none()
+    if not row or not row.settings:
+        raise HTTPException(status_code=404, detail="Affiliates not found")
+    affiliates = list(row.settings)
+    affiliates = [a for a in affiliates if a.get("id") != affiliate_id]
+    row.settings = affiliates
+    await db.flush()
+    return {"success": True}
+
+
+@router.post("/affiliates/user/{user_id}")
+async def save_affiliate_to_user(
+    user_id: str,
+    data: Dict,
+    current_user: Dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Save affiliate profile to a user (admin only)."""
+    _require_admin(current_user)
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.affiliateProfile = data
+    await db.flush()
+    return {"success": True}
+
+
+@router.delete("/affiliates/user/{user_id}")
+async def remove_affiliate_from_user(
+    user_id: str,
+    current_user: Dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Remove affiliate profile from a user (admin only)."""
+    _require_admin(current_user)
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.affiliateProfile = None
+    await db.flush()
+    return {"success": True}
+
+
+# ---------------------------------------------------------------------------
+# Audit Logs (stored as platform settings)
+# ---------------------------------------------------------------------------
+AUDIT_LOGS_KEY = "audit-logs"
+
+
+@router.get("/audit-logs")
+async def list_audit_logs(
+    count: int = 50,
+    current_user: Dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List audit logs (admin only)."""
+    _require_admin(current_user)
+    result = await db.execute(
+        select(PlatformSettings).where(PlatformSettings.id == AUDIT_LOGS_KEY)
+    )
+    row = result.scalar_one_or_none()
+    logs = list(row.settings) if row and row.settings else []
+    return {"logs": logs[:count]}
+
+
+@router.post("/audit-logs")
+async def create_audit_log(
+    data: Dict,
+    current_user: Dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create an audit log entry (admin only)."""
+    _require_admin(current_user)
+    result = await db.execute(
+        select(PlatformSettings).where(PlatformSettings.id == AUDIT_LOGS_KEY)
+    )
+    row = result.scalar_one_or_none()
+    logs = list(row.settings) if row and row.settings else []
+    log_entry = {
+        **data,
+        "id": data.get("id", f"log_{len(logs)+1}"),
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+    logs.append(log_entry)
+    if row:
+        row.settings = logs
+    else:
+        db.add(PlatformSettings(id=AUDIT_LOGS_KEY, settings=logs))
     await db.flush()
     return {"success": True}

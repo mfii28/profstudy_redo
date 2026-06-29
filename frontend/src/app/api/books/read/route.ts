@@ -122,10 +122,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Book file missing.' }, { status: 404 });
     }
 
-    const bytes = await body.transformToByteArray();
-    const payload = Buffer.from(bytes);
+    // Stream the file directly instead of buffering to avoid OOM on large PDFs
+    const webStream = body.transformToWebStream();
 
-    return new NextResponse(payload, {
+    return new Response(webStream, {
       headers: {
         'Content-Type': object.ContentType || 'application/pdf',
         'Content-Disposition': 'inline; filename="reader.pdf"',

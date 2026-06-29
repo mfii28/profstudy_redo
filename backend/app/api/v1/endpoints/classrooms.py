@@ -40,19 +40,24 @@ async def create_classroom(
     result = await db.execute(select(Classroom).where(Classroom.id == course_id))
     existing = result.scalar_one_or_none()
     if existing:
-        return {}  # Already exists
+        return {"classroom": _classroom_to_dict(existing)}
+
+    # Look up course to get a meaningful name and tutor
+    from app.models.models import Course
+    course_result = await db.execute(select(Course).where(Course.id == course_id))
+    course = course_result.scalar_one_or_none()
 
     now = datetime.utcnow()
     classroom = Classroom(
         id=course_id,
-        name=f"Classroom-{course_id[:8]}",
-        tutorId="",
+        name=course.title if course else f"Classroom-{course_id[:8]}",
+        tutorId=course.tutorId if course else current_user["id"],
         enrolledStudentIds=[],
         createdAt=now,
     )
     db.add(classroom)
     await db.flush()
-    return {}
+    return {"classroom": _classroom_to_dict(classroom)}
 
 
 @router.post("/{course_id}/sync-student")
@@ -70,7 +75,17 @@ async def sync_student_to_classroom(
     result = await db.execute(select(Classroom).where(Classroom.id == course_id))
     classroom = result.scalar_one_or_none()
     if not classroom:
-        return {}  # Classroom doesn't exist yet, silently ignore
+        # Auto-create classroom if it doesn't exist
+        now = datetime.utcnow()
+        classroom = Classroom(
+            id=course_id,
+            name=f"Classroom-{course_id[:8]}",
+            tutorId="",
+            enrolledStudentIds=[],
+            createdAt=now,
+        )
+        db.add(classroom)
+        await db.flush()
 
     current_ids = classroom.enrolledStudentIds or []
     if student_uid not in current_ids:

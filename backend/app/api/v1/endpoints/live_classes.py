@@ -27,6 +27,7 @@ def _lc_to_dict(lc: LiveClass) -> dict:
         "courseId": lc.courseId,
         "meetingId": lc.meetingId,
         "createdAt": lc.createdAt.isoformat() if lc.createdAt else None,
+        "updatedAt": lc.updatedAt.isoformat() if lc.updatedAt else None,
     }
 
 
@@ -92,6 +93,65 @@ async def create_live_session(
     db.add(session)
     await db.flush()
     return {"id": session_id}
+
+
+@router.get("/")
+async def list_live_sessions(
+    current_user: Dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all live sessions (with filters)."""
+    caller_role = current_user.get("role", "student")
+    query = select(LiveClass).order_by(LiveClass.startTime.desc())
+
+    # Tutors see their own sessions; students see upcoming ones
+    if caller_role == "tutor":
+        query = query.where(LiveClass.instructorId == current_user["id"])
+    elif caller_role == "student":
+        query = query.where(LiveClass.status.in_(["upcoming", "live"]))
+
+    result = await db.execute(query.limit(100))
+    sessions = result.scalars().all()
+    return {"sessions": [_lc_to_dict(s) for s in sessions]}
+
+
+@router.put("/{session_id}")
+async def update_live_session(
+    session_id: str,
+    data: Dict,
+    current_user: Dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update a live session (title, time, status, etc.)."""
+    result = await db.execute(select(LiveClass).where(LiveClass.id == session_id))
+    session = result.scalar_one_or_none()
+    if not session:
+        raise HTTPException(status_code=404, detail="Live session not found")
+
+    caller_role = current_user.get("role", "student")
+    is_admin = caller_role in ("admin", "superadmin", "subadmin")
+    if not is_admin and session.instructorId != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+
+    if "title" in data:
+        session.title = data["title"].strip()[:200]
+    if "startTime" in data:
+        try:
+            session.startTime = datetime.fromisoformat(data["startTime"].replace("Z", "+00:00"))
+        except (ValueError, AttributeError):
+            session.startTime = datetime.fromisoformat(data["startTime"])
+    if "durationMinutes" in data:
+        session.durationMinutes = data["durationMinutes"]
+    if "status" in data:
+        session.status = data["status"]
+    if "zoomUrl" in data:
+        session.joinUrl = data["zoomUrl"]
+    if "courseId" in data:
+        session.courseId = data["courseId"].strip() or None
+
+    session.updatedAt = datetime.utcnow()
+    await db.flush()
+    return {"success": True}
 
 
 @router.get("/{session_id}")

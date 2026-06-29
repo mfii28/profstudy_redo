@@ -54,5 +54,12 @@ export const createConversation = async (_participants: string[], _courseId?: st
 };
 
 export const getInstructorsForStudent = async (_enrolledCourseIds: string[]): Promise<User[]> => {
-  return [];
+  try {
+    const r = await apiFetch(`/tutor/students`);
+    if (!r.ok) return [];
+    const data = await r.json();
+    return data.users || data.students || [];
+  } catch {
+    return [];
+  }
 };

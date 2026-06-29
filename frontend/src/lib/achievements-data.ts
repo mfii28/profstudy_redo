@@ -10,6 +10,13 @@ import { apiFetch } from '@/lib/api-client';
 
 export const getAchievements = async (userId: string): Promise<Achievement[]> => {
     if (!userId) return [];
-    // Achievements not yet exposed via REST - return empty
-    return [];
+    try {
+        const res = await apiFetch(`/achievements/${userId}`);
+        if (!res.ok) return [];
+        const data = await res.json();
+        return data.achievements || [];
+    } catch (e) {
+        console.error('[Achievements] getAchievements error:', e);
+        return [];
+    }
 };

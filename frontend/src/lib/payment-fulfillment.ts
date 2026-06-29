@@ -564,8 +564,11 @@ export async function fulfillPaystackPayment({
           }
         }
 
+        // Collect notification promises so they complete before returning
+        const notificationPromises: Promise<any>[] = [];
+
         if (userData.email) {
-          sendTransactionalEmail({
+          const emailPromise = sendTransactionalEmail({
             type: 'enrollment',
             to: userData.email,
             recipientName: userData.name || 'Student',
@@ -588,10 +591,11 @@ export async function fulfillPaystackPayment({
               error: error?.message 
             });
           });
+          notificationPromises.push(emailPromise);
         }
 
         if (userData.phone_number) {
-          dispatchCommunication({
+          const sms1Promise = dispatchCommunication({
             eventKey: 'course_purchase',
             userId,
             phoneNumber: userData.phone_number,
@@ -605,8 +609,9 @@ export async function fulfillPaystackPayment({
               user_name: userData.name || 'Student',
             },
           }).catch(() => undefined);
+          notificationPromises.push(sms1Promise);
 
-          dispatchCommunication({
+          const sms2Promise = dispatchCommunication({
             eventKey: 'payment_confirmation',
             userId,
             phoneNumber: userData.phone_number,
@@ -623,6 +628,7 @@ export async function fulfillPaystackPayment({
           }).catch((error) =>
             logDispatchFailure('payment-confirmation', error, { userId, eventKey: 'payment_confirmation' })
           );
+          notificationPromises.push(sms2Promise);
         }
 
         const duration = Date.now() - startTime;
@@ -635,6 +641,9 @@ export async function fulfillPaystackPayment({
           itemCount: items.length,
           duration,
         });
+
+        // Await notifications so serverless function doesn't terminate early
+        await Promise.all(notificationPromises);
 
         return {
           orderId,

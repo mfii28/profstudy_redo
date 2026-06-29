@@ -6,23 +6,58 @@
  */
 
 import type { Affiliate } from './db';
+import { apiFetch } from '@/lib/api-client';
 
-export const saveAffiliateToUser = (userId: string, affiliate: Affiliate): void => {
-    console.warn('[Affiliate] saveAffiliateToUser: Not implemented via REST');
+export const saveAffiliateToUser = async (userId: string, affiliate: Affiliate): Promise<void> => {
+    try {
+        await apiFetch(`/admin/affiliates/user/${userId}`, {
+            method: 'POST',
+            body: JSON.stringify(affiliate),
+        });
+    } catch (e) {
+        console.error('[Affiliate] saveAffiliateToUser error:', e);
+    }
 };
 
-export const removeAffiliateFromUser = (userId: string): void => {
-    console.warn('[Affiliate] removeAffiliateFromUser: Not implemented via REST');
+export const removeAffiliateFromUser = async (userId: string): Promise<void> => {
+    try {
+        await apiFetch(`/admin/affiliates/user/${userId}`, {
+            method: 'DELETE',
+        });
+    } catch (e) {
+        console.error('[Affiliate] removeAffiliateFromUser error:', e);
+    }
 };
 
-export const removeAffiliate = (affiliateId: string): void => {
-    console.warn('[Affiliate] removeAffiliate: Not implemented via REST');
+export const removeAffiliate = async (affiliateId: string): Promise<void> => {
+    try {
+        await apiFetch(`/admin/affiliates/${affiliateId}`, {
+            method: 'DELETE',
+        });
+    } catch (e) {
+        console.error('[Affiliate] removeAffiliate error:', e);
+    }
 };
 
 export const getAffiliates = async (): Promise<Affiliate[]> => {
-    return [];
+    try {
+        const res = await apiFetch(`/admin/affiliates`);
+        if (!res.ok) return [];
+        const data = await res.json();
+        return data.affiliates || [];
+    } catch (e) {
+        console.error('[Affiliate] getAffiliates error:', e);
+        return [];
+    }
 };
 
-export const saveAffiliate = (affiliate: Affiliate): void => {
-    console.warn('[Affiliate] saveAffiliate: Not implemented via REST');
+export const saveAffiliate = async (affiliate: Affiliate): Promise<void> => {
+    try {
+        await apiFetch(`/admin/affiliates`, {
+            method: 'POST',
+            body: JSON.stringify(affiliate),
+        });
+    } catch (e) {
+        console.error('[Affiliate] saveAffiliate error:', e);
+    }
 };

@@ -23,11 +23,27 @@ export const getWeeklyStudyData = async (userId: string): Promise<WeeklyStudyDat
 
 export const getSubjectMasteryData = async (userId: string): Promise<SubjectMasteryData[]> => {
     if (!userId) return [];
-    return [];
+    try {
+        const res = await apiFetch(`/analytics/subject-mastery/${userId}`);
+        if (!res.ok) return [];
+        const data = await res.json();
+        return data.subjects || [];
+    } catch (e) {
+        console.error("Error fetching subject mastery data:", e);
+        return [];
+    }
 };
 
 export const getFunnelData = async (): Promise<FunnelDataPoint[]> => {
-    return [];
+    try {
+        const res = await apiFetch(`/analytics/funnel`);
+        if (!res.ok) return [];
+        const data = await res.json();
+        return data.funnel || [];
+    } catch (e) {
+        console.error("Error fetching funnel data:", e);
+        return [];
+    }
 };
 
 export const recordStudySession = async (...args: any[]): Promise<void> => {

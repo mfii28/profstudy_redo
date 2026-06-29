@@ -21,7 +21,19 @@ export const getPrograms = async (): Promise<CourseProgram[]> => {
     }
 };
 
-export const saveProgram = async (program: CourseProgram): Promise<void> => {};
+export const saveProgram = async (program: CourseProgram): Promise<void> => {
+    if (program.id) {
+        await apiFetch(`/admin/programs/${program.id}`, {
+            method: 'PUT',
+            body: JSON.stringify(program),
+        });
+    } else {
+        await apiFetch('/admin/programs', {
+            method: 'POST',
+            body: JSON.stringify(program),
+        });
+    }
+};
 
 export const addProgram = async (programOrName: CourseProgram | string): Promise<CourseProgram> => {
     const data = typeof programOrName === 'string' ? { id: `prog-${Date.now()}`, name: programOrName, description: '', courses: [], createdAt: new Date().toISOString() } as unknown as CourseProgram : programOrName;
