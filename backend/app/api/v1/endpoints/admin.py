@@ -167,6 +167,70 @@ async def get_security_telemetry(
     }
 
 
+# ---------------------------------------------------------------------------
+# Admin: User list and detail
+# ---------------------------------------------------------------------------
+@router.get("/users")
+async def list_admin_users(
+    page: int = 1,
+    page_size: int = 50,
+    role: Optional[str] = None,
+    current_user: Dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all users with pagination (admin only)."""
+    _require_admin(current_user)
+
+    query = select(User).order_by(User.createdAt.desc())
+    count_query = select(func.count(User.id))
+    if role:
+        query = query.where(User.role == role)
+        count_query = count_query.where(User.role == role)
+
+    total = (await db.execute(count_query)).scalar() or 0
+    offset = (page - 1) * page_size
+    query = query.offset(offset).limit(page_size)
+    result = await db.execute(query)
+    users = result.scalars().all()
+
+    return {
+        "users": [
+            {
+                "id": u.id, "name": u.name, "email": u.email, "role": u.role,
+                "avatar": u.avatar, "bio": u.bio, "status": u.status,
+                "tutorApproved": u.tutorApproved, "isPremium": u.isPremium,
+                "createdAt": u.createdAt.isoformat() if u.createdAt else None,
+            }
+            for u in users
+        ],
+        "total": total, "page": page, "pageSize": page_size,
+        "hasMore": (offset + page_size) < total,
+    }
+
+
+@router.get("/users/{user_id}")
+async def get_admin_user(
+    user_id: str,
+    current_user: Dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get a single user by ID (admin only)."""
+    _require_admin(current_user)
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {
+        "user": {
+            "id": user.id, "name": user.name, "email": user.email,
+            "role": user.role, "avatar": user.avatar, "bio": user.bio,
+            "status": user.status, "tutorApproved": user.tutorApproved,
+            "isPremium": user.isPremium,
+            "createdAt": user.createdAt.isoformat() if user.createdAt else None,
+        }
+    }
+
+
 @router.post("/users/search")
 async def search_users(
     data: Dict,

@@ -20,10 +20,10 @@ type AuthProfileSeed = {
 
 export const getUsers = async (page: number = 1, pageSize: number = 1000): Promise<{users: User[], hasMore: boolean}> => {
     try {
-        const res = await apiFetch('/users/profile');
+        const res = await apiFetch(`/admin/users?page=${page}&page_size=${pageSize}`);
         if (!res.ok) return { users: [], hasMore: false };
         const data = await res.json();
-        return { users: data.user ? [data.user] : [], hasMore: false };
+        return { users: data.users || [], hasMore: data.hasMore || false };
     } catch (error) {
         console.error("[UserData] Failed to fetch users:", error);
         return { users: [], hasMore: false };
@@ -32,7 +32,7 @@ export const getUsers = async (page: number = 1, pageSize: number = 1000): Promi
 
 export const getUserById = async (userId: string): Promise<User | undefined> => {
     try {
-        const res = await apiFetch('/users/profile');
+        const res = await apiFetch(`/admin/users/${encodeURIComponent(userId)}`);
         if (!res.ok) return undefined;
         const data = await res.json();
         return data.user;
