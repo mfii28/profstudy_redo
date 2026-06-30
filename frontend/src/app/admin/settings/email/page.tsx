@@ -71,8 +71,8 @@ export default function EmailTemplatesPage() {
 
   const [templates, setTemplates] = useState<EmailTemplates>(defaultEmailTemplates);
   const [selectedTemplate, setSelectedTemplate] = useState<EmailTemplateKey>('welcome');
-  const [subject, setSubject] = useState(defaultEmailTemplates.welcome.subject);
-  const [body, setBody] = useState(defaultEmailTemplates.welcome.body);
+  const [subject, setSubject] = useState(defaultEmailTemplates.welcome?.subject ?? '');
+  const [body, setBody] = useState(defaultEmailTemplates.welcome?.body ?? '');
   const [activeTab, setActiveTab] = useState('health');
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(true);
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
@@ -91,8 +91,8 @@ export default function EmailTemplatesPage() {
     try {
       const loaded = await getEmailTemplates();
       setTemplates(loaded);
-      setSubject(loaded.welcome.subject);
-      setBody(loaded.welcome.body);
+      setSubject(loaded.welcome?.subject ?? '');
+      setBody(loaded.welcome?.body ?? '');
     } catch {
       toast({ variant: 'destructive', title: 'Template load failed' });
     } finally {
@@ -115,8 +115,8 @@ export default function EmailTemplatesPage() {
   const handleTemplateChange = (value: string) => {
     const key = value as EmailTemplateKey;
     setSelectedTemplate(key);
-    setSubject(templates[key].subject);
-    setBody(templates[key].body);
+    setSubject(templates[key]?.subject ?? '');
+    setBody(templates[key]?.body ?? '');
   };
 
   const handleSaveTemplate = async () => {

@@ -11,7 +11,53 @@ export type CommunicationChannel = 'sms' | 'email';
 export type CommunicationEventKey = 'otp' | 'welcome' | 'course_purchase' | 'payment_confirmation' | 'payout_request' | 'payout_status' | 'subscription_renewal' | 'refund' | 'live_class_scheduled' | 'live_class_reminder' | 'password_reset' | 'broadcast' | 'newsletter';
 export type CommunicationTemplates = Record<string, any>;
 
-export const defaultCommunicationTemplates: CommunicationTemplates = {};
+export const defaultCommunicationTemplates: CommunicationTemplates = {
+  otp: {
+    sms: 'Your {{site_name}} verification code is: {{otp_code}}. Expires in {{expiry_minutes}} minutes.',
+    email: { subject: 'Your Verification Code', body: '<p>Your code: <strong>{{otp_code}}</strong></p><p>Expires in {{expiry_minutes}} minutes.</p>' },
+  },
+  welcome: {
+    email: { subject: 'Welcome to {{site_name}}', body: '<h1>Welcome, {{user_name}}!</h1><p>Start your learning journey today.</p>' },
+  },
+  course_purchase: {
+    email: { subject: 'Purchase Confirmed — {{course_name}}', body: '<h1>Thank you for your purchase!</h1><p>You are now enrolled in <strong>{{course_name}}</strong>.</p>' },
+    sms: 'Purchase confirmed for {{course_name}}. Thank you!',
+  },
+  payment_confirmation: {
+    email: { subject: 'Payment Confirmed — {{amount}}', body: '<h1>Payment Successful</h1><p>Amount: {{amount}}<br/>Ref: {{reference}}</p>' },
+    sms: 'Payment of {{amount}} confirmed. Ref: {{reference}}',
+  },
+  payout_request: {
+    email: { subject: 'Payout Request — {{amount}}', body: '<h1>Payout Request</h1><p>Amount: {{amount}}</p>' },
+  },
+  payout_status: {
+    email: { subject: 'Payout {{status}} — {{amount}}', body: '<h1>Payout {{status}}</h1><p>Amount: {{amount}}</p>' },
+  },
+  subscription_renewal: {
+    email: { subject: 'Subscription Renewal — {{plan_name}}', body: '<h1>Subscription Renewal</h1><p>Your {{plan_name}} plan renews on {{renewal_date}}.</p>' },
+  },
+  refund: {
+    email: { subject: 'Refund Processed — {{amount}}', body: '<h1>Refund Processed</h1><p>Amount: {{amount}}<br/>Item: {{item_name}}</p>' },
+  },
+  live_class_scheduled: {
+    email: { subject: 'Live Class Scheduled — {{class_title}}', body: '<h1>Live Class Scheduled</h1><p><strong>{{class_title}}</strong><br/>{{start_time}}</p><p><a href="{{join_link}}">Join Class</a></p>' },
+    sms: 'Live class: {{class_title}} at {{start_time}}. Join: {{join_link}}',
+  },
+  live_class_reminder: {
+    email: { subject: 'Reminder: {{class_title}} starts soon', body: '<h1>Class Reminder</h1><p><strong>{{class_title}}</strong> starts at {{start_time}}.</p><p><a href="{{join_link}}">Join Now</a></p>' },
+    sms: 'Reminder: {{class_title}} starts at {{start_time}}.',
+  },
+  password_reset: {
+    email: { subject: 'Reset Your Password', body: '<h1>Password Reset</h1><p><a href="{{reset_link}}">Click here to reset your password</a></p><p>Expires in {{expiry_hours}} hour(s).</p>' },
+  },
+  broadcast: {
+    email: { subject: '{{title}}', body: '<h1>{{title}}</h1><p>{{message}}</p>' },
+    sms: '{{message}}',
+  },
+  newsletter: {
+    email: { subject: '{{title}}', body: '<h1>{{title}}</h1><p>{{content}}</p><p><a href="{{unsubscribe_link}}">Unsubscribe</a></p>' },
+  },
+};
 
 export const COMMUNICATION_EVENTS: { key: CommunicationEventKey; label: string; channels: CommunicationChannel[] }[] = [
   { key: 'otp', label: 'OTP Verification', channels: ['email', 'sms'] },
