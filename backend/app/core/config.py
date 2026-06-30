@@ -27,8 +27,9 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: Optional[str] = None
     JWT_ALGORITHM: str = "HS256"
     
-    # Supabase Service Role (for admin-auth operations)
+    # Supabase (for JWT verification and API access)
     SUPABASE_URL: Optional[str] = None
+    SUPABASE_ANON_KEY: Optional[str] = None
     SUPABASE_SERVICE_ROLE_KEY: Optional[str] = None
     
     # Cloudflare R2 Settings

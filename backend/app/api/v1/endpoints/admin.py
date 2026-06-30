@@ -18,9 +18,23 @@ router = APIRouter()
 ADMIN_ROLES = ("admin", "superadmin", "subadmin")
 
 
-def _require_admin(current_user: Dict):
-    if current_user.get("role") not in ADMIN_ROLES:
-        raise HTTPException(status_code=403, detail="Unauthorized")
+async def _require_admin(current_user: Dict, db: AsyncSession):
+    """Check if the current user has an admin role.
+    First checks JWT claim (fast), then falls back to database lookup."""
+    role = current_user.get("role", "")
+    if role in ADMIN_ROLES:
+        return
+
+    # JWT role not sufficient — check database for actual role
+    from app.models.models import User
+    result = await db.execute(select(User).where(User.id == current_user.get("id")))
+    user = result.scalar_one_or_none()
+    if user and user.role and user.role in ADMIN_ROLES:
+        # Update the current_user dict with the real role
+        current_user["role"] = user.role
+        return
+
+    raise HTTPException(status_code=403, detail="Unauthorized")
 
 
 @router.get("/analytics/overview")
@@ -29,7 +43,7 @@ async def get_analytics_overview(
     db: AsyncSession = Depends(get_db),
 ):
     """Platform analytics overview."""
-    _require_admin(current_user)
+    await _require_admin(current_user, db)
 
     users_count = (await db.execute(select(func.count(User.id)))).scalar() or 0
     courses_count = (await db.execute(select(func.count(Course.id)))).scalar() or 0
@@ -116,7 +130,7 @@ async def get_dashboard_stats(
     db: AsyncSession = Depends(get_db),
 ):
     """Admin dashboard statistics."""
-    _require_admin(current_user)
+    await _require_admin(current_user, db)
 
     total_users = (await db.execute(select(func.count(User.id)))).scalar() or 0
     total_courses = (await db.execute(select(func.count(Course.id)))).scalar() or 0
@@ -149,7 +163,7 @@ async def get_security_telemetry(
     db: AsyncSession = Depends(get_db),
 ):
     """Security telemetry for admin."""
-    _require_admin(current_user)
+    await _require_admin(current_user, db)
 
     all_users = await db.execute(select(User).limit(500))
     users = all_users.scalars().all()
@@ -179,7 +193,7 @@ async def list_admin_users(
     db: AsyncSession = Depends(get_db),
 ):
     """List all users with pagination (admin only)."""
-    _require_admin(current_user)
+    await _require_admin(current_user, db)
 
     query = select(User).order_by(User.createdAt.desc())
     count_query = select(func.count(User.id))
@@ -215,7 +229,7 @@ async def get_admin_user(
     db: AsyncSession = Depends(get_db),
 ):
     """Get a single user by ID (admin only)."""
-    _require_admin(current_user)
+    await _require_admin(current_user, db)
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
@@ -238,7 +252,7 @@ async def search_users(
     db: AsyncSession = Depends(get_db),
 ):
     """Search users by email or name prefix (admin only)."""
-    _require_admin(current_user)
+    await _require_admin(current_user, db)
 
     query_text = data.get("query", "").strip()
     max_results = min(data.get("max", 50), 200)
@@ -271,7 +285,7 @@ async def admin_enroll_user(
     db: AsyncSession = Depends(get_db),
 ):
     """Admin enrolls a user in a course."""
-    _require_admin(current_user)
+    await _require_admin(current_user, db)
 
     user_id = data.get("userId")
     course_id = data.get("courseId")
@@ -307,7 +321,7 @@ async def admin_bulk_enroll(
     db: AsyncSession = Depends(get_db),
 ):
     """Admin bulk enrolls multiple users in a course."""
-    _require_admin(current_user)
+    await _require_admin(current_user, db)
 
     user_ids = data.get("userIds", [])
     course_id = data.get("courseId")
@@ -352,7 +366,7 @@ async def record_manual_payment(
     db: AsyncSession = Depends(get_db),
 ):
     """Record a manual payment (admin only)."""
-    _require_admin(current_user)
+    await _require_admin(current_user, db)
 
     now = datetime.utcnow()
     payment_id = f"pmt-{int(now.timestamp())}-{random.randint(1000, 9999)}"
@@ -410,7 +424,7 @@ async def block_ip(
     db: AsyncSession = Depends(get_db),
 ):
     """Add an IP to the blocklist."""
-    _require_admin(current_user)
+    await _require_admin(current_user, db)
 
     ip = data.get("ip")
     reason = data.get("reason", "")
@@ -446,7 +460,7 @@ async def unblock_ip(
     db: AsyncSession = Depends(get_db),
 ):
     """Remove an IP from the blocklist."""
-    _require_admin(current_user)
+    await _require_admin(current_user, db)
 
     result = await db.execute(select(PlatformSettings).where(PlatformSettings.id == "ip-blocklist"))
     setting = result.scalar_one_or_none()
@@ -466,7 +480,7 @@ async def create_coupon(
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new coupon (admin only)."""
-    _require_admin(current_user)
+    await _require_admin(current_user, db)
     now = datetime.utcnow()
     coupon = Coupon(
         id=f"cup-{int(now.timestamp())}",
@@ -489,7 +503,7 @@ async def list_coupons(
     db: AsyncSession = Depends(get_db),
 ):
     """List all coupons (admin only)."""
-    _require_admin(current_user)
+    await _require_admin(current_user, db)
     result = await db.execute(select(Coupon).order_by(Coupon.createdAt.desc()))
     coupons = result.scalars().all()
     return {
@@ -516,7 +530,7 @@ async def delete_coupon(
     db: AsyncSession = Depends(get_db),
 ):
     """Delete a coupon (admin only)."""
-    _require_admin(current_user)
+    await _require_admin(current_user, db)
     result = await db.execute(select(Coupon).where(Coupon.id == coupon_id))
     coupon = result.scalar_one_or_none()
     if not coupon:
@@ -535,7 +549,7 @@ async def list_email_templates(
     db: AsyncSession = Depends(get_db),
 ):
     """List all email templates (admin only)."""
-    _require_admin(current_user)
+    await _require_admin(current_user, db)
     result = await db.execute(
         select(PlatformSettings).where(PlatformSettings.id == "email-templates")
     )
@@ -552,7 +566,7 @@ async def update_email_template(
     db: AsyncSession = Depends(get_db),
 ):
     """Update a single email template (admin only)."""
-    _require_admin(current_user)
+    await _require_admin(current_user, db)
     result = await db.execute(
         select(PlatformSettings).where(PlatformSettings.id == "email-templates")
     )
@@ -576,7 +590,7 @@ async def list_communication_templates(
     db: AsyncSession = Depends(get_db),
 ):
     """List all communication templates (admin only)."""
-    _require_admin(current_user)
+    await _require_admin(current_user, db)
     result = await db.execute(
         select(PlatformSettings).where(PlatformSettings.id == "communication-templates")
     )
@@ -593,7 +607,7 @@ async def update_communication_template(
     db: AsyncSession = Depends(get_db),
 ):
     """Update a single communication template (admin only)."""
-    _require_admin(current_user)
+    await _require_admin(current_user, db)
     result = await db.execute(
         select(PlatformSettings).where(PlatformSettings.id == "communication-templates")
     )
@@ -620,7 +634,7 @@ async def list_affiliates(
     db: AsyncSession = Depends(get_db),
 ):
     """List all affiliates (admin only)."""
-    _require_admin(current_user)
+    await _require_admin(current_user, db)
     result = await db.execute(
         select(PlatformSettings).where(PlatformSettings.id == AFFILIATES_KEY)
     )
@@ -636,7 +650,7 @@ async def create_affiliate(
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new affiliate (admin only)."""
-    _require_admin(current_user)
+    await _require_admin(current_user, db)
     result = await db.execute(
         select(PlatformSettings).where(PlatformSettings.id == AFFILIATES_KEY)
     )
@@ -659,7 +673,7 @@ async def delete_affiliate(
     db: AsyncSession = Depends(get_db),
 ):
     """Delete an affiliate (admin only)."""
-    _require_admin(current_user)
+    await _require_admin(current_user, db)
     result = await db.execute(
         select(PlatformSettings).where(PlatformSettings.id == AFFILIATES_KEY)
     )
@@ -681,7 +695,7 @@ async def save_affiliate_to_user(
     db: AsyncSession = Depends(get_db),
 ):
     """Save affiliate profile to a user (admin only)."""
-    _require_admin(current_user)
+    await _require_admin(current_user, db)
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
@@ -698,7 +712,7 @@ async def remove_affiliate_from_user(
     db: AsyncSession = Depends(get_db),
 ):
     """Remove affiliate profile from a user (admin only)."""
-    _require_admin(current_user)
+    await _require_admin(current_user, db)
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
@@ -721,7 +735,7 @@ async def list_audit_logs(
     db: AsyncSession = Depends(get_db),
 ):
     """List audit logs (admin only)."""
-    _require_admin(current_user)
+    await _require_admin(current_user, db)
     result = await db.execute(
         select(PlatformSettings).where(PlatformSettings.id == AUDIT_LOGS_KEY)
     )
@@ -737,7 +751,7 @@ async def create_audit_log(
     db: AsyncSession = Depends(get_db),
 ):
     """Create an audit log entry (admin only)."""
-    _require_admin(current_user)
+    await _require_admin(current_user, db)
     result = await db.execute(
         select(PlatformSettings).where(PlatformSettings.id == AUDIT_LOGS_KEY)
     )

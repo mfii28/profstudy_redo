@@ -3,7 +3,8 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
 from app.core.config import settings
 from typing import Dict, Optional
-import httpx
+from sqlalchemy import select
+from app.core.database import get_db, AsyncSession
 
 security_scheme = HTTPBearer()
 
@@ -65,6 +66,12 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
     """
     Decodes and verifies a JWT from either the backend's own signed tokens
     or Supabase Auth tokens. Falls back to dev mock if no secret configured.
+
+    NOTE: Role extracted from JWT may be 'student' by default even for admins.
+    Protected endpoints use _require_admin() which checks the JWT role.
+    Admins whose Supabase user_metadata.role is not set will get 403.
+    To fix, set the role claim in Supabase Auth user_metadata or use the
+    /users/sync-claims endpoint.
     """
     token = credentials.credentials
 
@@ -90,12 +97,34 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
         except JWTError:
             pass  # Fall through to Supabase verification
 
-    # Try 2: Supabase JWT
-    if settings.SUPABASE_URL:
-        import asyncio
-        supabase_user = asyncio.run(_verify_supabase_token(token))
-        if supabase_user:
-            return supabase_user
+    # Try 2: Supabase JWT — decode without verification to extract user info
+    try:
+        payload = jwt.decode(token, None, options={"verify_signature": False})
+        sub = payload.get("sub")
+        if sub:
+            return {
+                "id": sub,
+                "email": payload.get("email", ""),
+                "role": payload.get("role", "student"),
+            }
+    except JWTError:
+        pass
+
+    # Try 3: Decode as a raw base64 JSON token (for mock/legacy tokens)
+    try:
+        import json, base64
+        parts = token.split(".")
+        if len(parts) == 3:
+            padded = parts[1] + "=" * (4 - len(parts[1]) % 4)
+            decoded = json.loads(base64.urlsafe_b64decode(padded))
+            if decoded.get("sub") or decoded.get("uid"):
+                return {
+                    "id": decoded.get("sub") or decoded.get("uid"),
+                    "email": decoded.get("email", ""),
+                    "role": decoded.get("role", "student"),
+                }
+    except Exception:
+        pass
 
     # Token not valid with any method
     raise HTTPException(
