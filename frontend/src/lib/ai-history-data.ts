@@ -5,8 +5,8 @@
  * Routes through the Python backend REST API.
  */
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-const AI_HISTORY_URL = `${API_URL}/api/v1/ai-history`;
+const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/+$/, '');
+const AI_HISTORY_URL = `${API_URL}/ai-history`;
 
 import type { AiInteraction } from './db';
 

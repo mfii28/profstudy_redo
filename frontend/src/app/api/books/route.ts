@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/+$/, '');
 
 export async function GET(req: NextRequest) {
   try {
@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
     if (type) params.set('type', type);
     params.set('limit', String(pageSize));
 
-    const res = await fetch(`${API_URL}/api/v1/books?${params.toString()}`, {
+    const res = await fetch(`${API_URL}/books?${params.toString()}`, {
       headers: { 'Content-Type': 'application/json' },
     });
     if (!res.ok) throw new Error('Backend fetch failed');
@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const payload = await req.json();
-    const res = await fetch(`${API_URL}/api/v1/books`, {
+    const res = await fetch(`${API_URL}/books`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),

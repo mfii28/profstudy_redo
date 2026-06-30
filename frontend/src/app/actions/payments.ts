@@ -100,8 +100,8 @@ export async function enrollFreeCourse(
   courseId: string
 ) {
   try {
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-    const response = await fetch(`${API_URL}/api/v1/enrollments/enroll`, {
+    const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/+$/, '');
+    const response = await fetch(`${API_URL}/enrollments/enroll`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
