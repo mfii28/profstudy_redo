@@ -697,36 +697,54 @@ export const adminAuth = {
     if (!token || token === 'nextauth-token-placeholder') {
       return { uid: 'dev-user-id' };
     }
+    
+    // Check if the token is a mock __session base64 cookie
+    try {
+      const mockDecoded = JSON.parse(Buffer.from(token, 'base64').toString('utf-8'));
+      if (mockDecoded && mockDecoded.uid) {
+        return { uid: mockDecoded.uid, ...mockDecoded };
+      }
+    } catch (e) {
+      // Ignored
+    }
+
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      );
+      const { data: { user }, error } = await supabase.auth.getUser(token);
+      if (user && !error) {
+        return { 
+          uid: user.id,
+          email: user.email,
+          name: user.user_metadata?.name || user.user_metadata?.full_name,
+          picture: user.user_metadata?.avatar_url,
+          phone_number: user.phone
+        };
+      }
+    } catch (supabaseError) {
+      console.warn('[verifyIdToken] Supabase verification failed:', supabaseError);
+    }
+
     try {
       const jsonwebtoken = (await import('jsonwebtoken')).default;
       const secret = process.env.NEXTAUTH_SECRET || process.env.INTERNAL_EMAIL_SECRET || '';
-      const decoded: any = jsonwebtoken.verify(token, secret);
-      return { uid: decoded.sub || decoded.uid };
-    } catch {
-      try {
-        const { createClient } = await import('@supabase/supabase-js');
-        const supabase = createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-        );
-        const { data: { user }, error } = await supabase.auth.getUser(token);
-        if (user && !error) {
-          return { uid: user.id };
-        }
-      } catch (supabaseError) {
-        console.warn('[verifyIdToken] Supabase verification failed, falling back to decode:', supabaseError);
+      if (secret) {
+        const decoded: any = jsonwebtoken.verify(token, secret);
+        if (decoded) return { uid: decoded.sub || decoded.uid, ...decoded };
       }
-      try {
-        const jsonwebtoken = (await import('jsonwebtoken')).default;
-        const decoded: any = jsonwebtoken.decode(token);
-        if (decoded && (decoded.sub || decoded.uid)) {
-          return { uid: decoded.sub || decoded.uid };
-        }
-      } catch (e) {
-        // Ignored
+      
+      const decoded: any = jsonwebtoken.decode(token);
+      if (decoded && (decoded.sub || decoded.uid)) {
+        return { uid: decoded.sub || decoded.uid, ...decoded };
       }
-      return { uid: token };
+    } catch (e) {
+      // Ignored
     }
+
+    throw new Error('Invalid authentication token');
   }
 } as any;
 

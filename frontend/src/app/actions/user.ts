@@ -214,8 +214,31 @@ export async function bootstrapUserProfile(
   idToken: string,
 ): Promise<{ isNew: boolean; error?: string }> {
   try {
-    const decoded = await adminAuth.verifyIdToken(idToken);
-    const { uid, email, name: displayName, picture: photoURL, phone_number: phoneNumber } = decoded;
+    const { createClient } = await import('@/lib/supabase-server');
+    const supabase = await createClient();
+
+    let user;
+    // Attempt with token
+    if (idToken) {
+      const { data, error } = await supabase.auth.getUser(idToken);
+      if (data.user && !error) user = data.user;
+    }
+
+    // Attempt with session cookies if token failed
+    if (!user) {
+      const { data, error } = await supabase.auth.getUser();
+      if (data.user && !error) user = data.user;
+    }
+
+    if (!user) {
+      return { isNew: false, error: 'Could not authenticate user for bootstrap.' };
+    }
+
+    const uid = user.id;
+    const email = user.email;
+    const displayName = user.user_metadata?.name || user.user_metadata?.full_name || '';
+    const photoURL = user.user_metadata?.avatar_url || '';
+    const phoneNumber = user.phone || '';
 
     if (!email) {
       logger.warn('[UserBootstrap] Token has no email', { uid });
