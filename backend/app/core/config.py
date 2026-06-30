@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
 from typing import Optional
 
 class Settings(BaseSettings):
@@ -8,6 +9,16 @@ class Settings(BaseSettings):
     
     # Database Settings (SQLAlchemy async)
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/studymate"
+
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def fix_database_url(cls, v: str) -> str:
+        if isinstance(v, str):
+            if v.startswith("postgres://"):
+                return v.replace("postgres://", "postgresql+asyncpg://", 1)
+            if v.startswith("postgresql://"):
+                return v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return v
 
     # Synchronous variant for Alembic / scripts that don't need async
     SYNC_DATABASE_URL: str = "postgresql+psycopg://postgres:postgres@localhost:5432/studymate"

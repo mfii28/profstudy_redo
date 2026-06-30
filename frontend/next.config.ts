@@ -13,11 +13,7 @@ const withPWA = withPWAInit({
     document: '/offline',
   },
   workboxOptions: {
-    skipWaiting: true,
-    clientsClaim: true,
     disableDevLogs: true,
-    navigateFallback: '/offline',
-    navigateFallbackDenylist: [/^\/api\//, /^\/_next\/data\//],
     runtimeCaching: [
       {
         urlPattern: /^https:\/\/fonts\.(?:googleapis|gstatic)\.com\/.*/i,
@@ -44,15 +40,6 @@ const withPWA = withPWAInit({
           url.hostname.includes('r2.dev') ||
           url.hostname.includes('paystack'),
         handler: 'NetworkOnly',
-      },
-      {
-        urlPattern: ({ request }: { request: Request }) => request.mode === 'navigate',
-        handler: 'NetworkFirst',
-        options: {
-          cacheName: 'pages',
-          expiration: { maxEntries: 32, maxAgeSeconds: 24 * 60 * 60 },
-          networkTimeoutSeconds: 25,
-        },
       },
     ],
   },
