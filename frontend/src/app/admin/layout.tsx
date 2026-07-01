@@ -241,7 +241,7 @@ export default function AdminDashboardLayout({
           </SidebarHeader>
           
           <SidebarContent className="p-2">
-            <AdminDashboardNav />
+            <AdminDashboardNav profile={adminProfile} />
           </SidebarContent>
 
           <SidebarFooter>

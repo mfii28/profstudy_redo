@@ -71,16 +71,21 @@ const iconMap: Record<AdminNavIconKey, React.ComponentType<{ className?: string 
   package: Package,
 };
 
-export function AdminDashboardNav() {
+export function AdminDashboardNav({ profile }: { profile?: UserProfile }) {
   const pathname = usePathname();
   const { user: currentUser, isLoading: isUserLoading } = useUser();
-  const [userProfile, setUserProfile] = React.useState<UserProfile | null>(null);
-  const [isProfileLoading, setIsProfileLoading] = React.useState(true);
+  const [userProfile, setUserProfile] = React.useState<UserProfile | null>(profile || null);
+  const [isProfileLoading, setIsProfileLoading] = React.useState(!profile);
   const [openItems, setOpenItems] = React.useState<Record<string, boolean>>({});
   const [search, setSearch] = React.useState('');
 
   React.useEffect(() => {
     const fetchUserProfile = async () => {
+      // If profile was already passed as a prop, skip the fetch
+      if (profile) {
+        setIsProfileLoading(false);
+        return;
+      }
       if (currentUser) {
         try {
           const res = await apiFetch('/users/profile');
@@ -97,7 +102,7 @@ export function AdminDashboardNav() {
     if (!isUserLoading) {
       fetchUserProfile();
     }
-  }, [currentUser, isUserLoading]);
+  }, [currentUser, isUserLoading, profile]);
 
   // Sync open states with current path
   React.useEffect(() => {
@@ -117,8 +122,13 @@ export function AdminDashboardNav() {
   }
 
   if (isUserLoading || isProfileLoading) {
-    // You can render a loading skeleton here
-    return <div className="grid items-start gap-2"></div>;
+    return (
+      <div className="grid items-start gap-2 px-3">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <div key={i} className="h-9 w-full animate-pulse rounded-lg bg-muted" />
+        ))}
+      </div>
+    );
   }
 
   return (

@@ -2,6 +2,12 @@ import type { Metadata, Viewport } from 'next';
 import { Barlow_Semi_Condensed, Work_Sans } from 'next/font/google';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
+import { initSentry } from '@/lib/sentry';
+
+// Initialize Sentry error tracking (client-side only)
+if (typeof window !== 'undefined') {
+  initSentry();
+}
 
 const barlowSemiCondensed = Barlow_Semi_Condensed({
   subsets: ['latin'],
