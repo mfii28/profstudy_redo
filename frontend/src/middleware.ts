@@ -388,10 +388,20 @@ export async function middleware(request: NextRequest) {
   response.headers.set('X-XSS-Protection', '1; mode=block');
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   response.headers.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
+  response.headers.set('Cross-Origin-Resource-Policy', 'same-origin');
+  response.headers.set('Cross-Origin-Embedder-Policy', 'credentialless');
+  response.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
   response.headers.set(
     'Permissions-Policy',
     'geolocation=(), microphone=(self), camera=(self)'
   );
+
+  // Prevent caching of auth pages and admin panel
+  if (pathname.startsWith('/admin') || pathname.startsWith('/login') || pathname.startsWith('/signup')) {
+    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    response.headers.set('Pragma', 'no-cache');
+    response.headers.set('Expires', '0');
+  }
   response.headers.set(
     'Content-Security-Policy',
     [
@@ -399,8 +409,8 @@ export async function middleware(request: NextRequest) {
       "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://apis.google.com https://*.firebaseio.com https://*.googleapis.com https://unpkg.com https://vercel.live https://source.zoom.us",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "img-src 'self' data: blob: https://*.googleapis.com https://*.googleusercontent.com https://cdn.mytestingdomain.icu https://*.r2.cloudflarestorage.com https://*.r2.dev https://placehold.co https://images.unsplash.com https://picsum.photos https://i.pravatar.cc https://*.replit.dev https://*.repl.co https://*.replit.app",
-      "font-src 'self' https://fonts.gstatic.com https://unpkg.com",
-      "connect-src 'self' http://localhost:8000 http://127.0.0.1:8000 https://*.supabase.co https://*.firebaseio.com https://*.googleapis.com https://*.firebase.google.com wss://*.firebaseio.com https://cdn.mytestingdomain.icu https://*.r2.cloudflarestorage.com https://*.r2.dev https://unpkg.com https://source.zoom.us wss://*.zoom.us wss://*.zoomgov.com https://*.zoom.us https://*.zoomgov.com https://*.replit.dev https://*.repl.co https://*.replit.app https://*.onrender.com",
+      "font-src 'self' https://fonts.gstatic.com https://unpkg.com https://vercel.live",
+      "connect-src 'self' http://localhost:8000 http://127.0.0.1:8000 https://*.supabase.co https://*.firebaseio.com https://*.googleapis.com https://*.firebase.google.com wss://*.firebaseio.com https://cdn.mytestingdomain.icu https://*.r2.cloudflarestorage.com https://*.r2.dev https://unpkg.com https://source.zoom.us wss://*.zoom.us wss://*.zoomgov.com https://*.zoom.us https://*.zoomgov.com https://*.replit.dev https://*.repl.co https://*.replit.app https://*.onrender.com https://vercel.live https://*.vercel.app",
       "media-src 'self' blob: https://*.r2.cloudflarestorage.com https://*.r2.dev",
       "frame-src 'self' https://*.firebaseapp.com https://accounts.google.com https://www.youtube.com https://www.youtube-nocookie.com https://*.r2.cloudflarestorage.com https://*.r2.dev https://vercel.live https://*.replit.dev https://*.repl.co https://*.replit.app",
       "worker-src 'self' blob: https://source.zoom.us",

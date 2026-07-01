@@ -10,6 +10,17 @@ export const maxDuration = 300;
 const BUCKET_NAME = process.env.R2_BUCKET_NAME || 'profstudymate';
 const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500 MB
 
+// Allowed MIME types for uploads
+const ALLOWED_MIME_TYPES = new Set([
+  'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml',
+  'application/pdf',
+  'video/mp4', 'video/webm', 'video/quicktime',
+  'audio/mpeg', 'audio/wav', 'audio/ogg',
+  'text/plain', 'text/csv',
+  'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+]);
+
 /**
  * Proxy upload endpoint that streams the file body to R2.
  * This avoids browser CORS issues with presigned PUT URLs by routing
@@ -46,6 +57,17 @@ export async function PUT(request: NextRequest) {
   // --- Key ---
   const key = request.headers.get('x-upload-key');
   const contentType = request.headers.get('content-type') || 'application/octet-stream';
+
+  // --- MIME validation ---
+  if (!ALLOWED_MIME_TYPES.has(contentType) && !contentType.startsWith('image/') && !contentType.startsWith('video/') && !contentType.startsWith('audio/')) {
+    return NextResponse.json({ error: 'File type not allowed.' }, { status: 415 });
+  }
+
+  // Block executable file types
+  const blockedExtensions = ['.exe', '.bat', '.cmd', '.sh', '.msi', '.scr', '.ps1', '.vbs', '.dll', '.jar', '.wasm', '.bin'];
+  if (key && blockedExtensions.some(ext => key.toLowerCase().endsWith(ext))) {
+    return NextResponse.json({ error: 'Executable files are not allowed.' }, { status: 415 });
+  }
 
   if (!key) {
     return NextResponse.json({ error: 'Missing x-upload-key header.' }, { status: 400 });

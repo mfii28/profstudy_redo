@@ -200,6 +200,9 @@ model BookPurchase {
   bookId    String
   book      Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([bookId])
 }
 
 model Assignment {
@@ -211,6 +214,9 @@ model Assignment {
   status    String   @default("pending") // pending, submitted, graded
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
 }
 
 model Note {
@@ -221,6 +227,8 @@ model Note {
   content   String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }
 
 model Review {
@@ -231,6 +239,9 @@ model Review {
   rating    Int
   comment   String?
   createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([courseId])
 }
 
 model DiscussionThread {

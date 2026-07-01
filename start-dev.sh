@@ -54,13 +54,20 @@ fi
 
 $PYTHON -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload &
 BACKEND_PID=$!
-sleep 2
-if kill -0 "$BACKEND_PID" 2>/dev/null; then
-    ok "Backend running at http://localhost:8000  (PID $BACKEND_PID)"
-else
-    err "Backend failed to start. Check backend/.env and database connection."
-    exit 1
-fi
+
+# Wait for backend to be healthy (up to 15 seconds)
+info "Waiting for backend to be ready …"
+for i in $(seq 1 15); do
+    if curl -s http://127.0.0.1:8000/health 2>/dev/null | grep -q "online"; then
+        ok "Backend healthy at http://localhost:8000  (PID $BACKEND_PID)"
+        break
+    fi
+    if [ "$i" -eq 15 ]; then
+        err "Backend health check failed after 15s. Check backend/.env and database connection."
+        exit 1
+    fi
+    sleep 1
+done
 
 # ── 2. Frontend (Next.js) ───────────────────────────────────
 info "Starting frontend …"

@@ -4,17 +4,59 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.core.database import get_db
 from app.core.config import settings
-from app.core.security import get_current_user
+from app.core.security import get_current_user, rate_limit
 from app.models.models import Course, TutorDetail, Order, User
 from app.api.v1.endpoints.rag import get_course_markdown_text
 import google.generativeai as genai
 import json
 import urllib.parse
+import re
+import logging
 from typing import Dict, Any, Optional
+from datetime import datetime, date
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 PERSONAS = {'Friendly', 'Strict', 'Beginner', 'Expert', 'Exam Coach'}
+
+# ── Prompt injection detection ─────────────────────────────
+PROMPT_INJECTION_PATTERNS = [
+    r"(?i)(ignore|disregard|forget|override)\s+(all\s+)?(previous|above|below|instructions|prompts)",
+    r"(?i)(you are (now|not) )|(act as if)|(pretend to be)|(new (instruction|rule))",
+    r"(?i)(system prompt|system message|developer prompt)",
+    r"(?i)(print|output|show|display)\s+(the\s+)?(above|system|prompt|instruction|text)",
+    r"(?i)(forget|clear|reset|erase)\s+(context|history|memory|conversation)",
+]
+
+# ── Per-user daily cost tracker (in-memory) ────────────────
+# Production: replace with Redis
+_daily_usage: dict = {}  # {user_id + date: token_count}
+
+def _check_daily_quota(user_id: str, max_tokens: int = 100_000) -> bool:
+    """Check if user has exceeded daily AI token quota."""
+    key = f"{user_id}:{date.today().isoformat()}"
+    used = _daily_usage.get(key, 0)
+    return used < max_tokens
+
+def _record_usage(user_id: str, tokens: int):
+    key = f"{user_id}:{date.today().isoformat()}"
+    _daily_usage[key] = _daily_usage.get(key, 0) + tokens
+
+def _detect_prompt_injection(text: str) -> bool:
+    """Basic prompt injection detection."""
+    for pattern in PROMPT_INJECTION_PATTERNS:
+        if re.search(pattern, text):
+            return True
+    return False
+
+def _sanitize_output(text: str) -> str:
+    """Remove potential XSS vectors from AI output."""
+    # Strip HTML tags since output may contain user-controlled data
+    text = re.sub(r'<script[^>]*>.*?</script>', '', text, flags=re.DOTALL)
+    text = re.sub(r'<[^>]*onerror=[^>]*>', '', text)
+    return text
 
 def build_tutor_system_instruction(persona: str) -> str:
     return f"""You are a professional AI tutor for the Profs Training Solutions platform.
@@ -64,6 +106,15 @@ async def ai_tutor_stream(
     
     if not course_id or not question:
         raise HTTPException(status_code=404, detail="courseId and question are required.")
+    
+    # ── Prompt injection check ──
+    if _detect_prompt_injection(question):
+        logger.warning(f"[AI Tutor] Prompt injection blocked for user {uid}")
+        raise HTTPException(status_code=400, detail="Question contains prohibited patterns.")
+    
+    # ── Daily quota check ──
+    if not _check_daily_quota(uid):
+        raise HTTPException(status_code=429, detail="Daily AI query limit reached.")
         
     if persona not in PERSONAS:
         persona = "Friendly"
@@ -114,6 +165,7 @@ async def ai_tutor_stream(
     meta_header = urllib.parse.quote(json.dumps(source_docs))
     
     def generate():
+        token_count = 0
         try:
             model = genai.GenerativeModel(
                 model_name="gemini-2.5-flash",
@@ -122,9 +174,13 @@ async def ai_tutor_stream(
             response_stream = model.generate_content(user_content, stream=True)
             for chunk in response_stream:
                 if chunk.text:
-                    yield chunk.text
+                    sanitized = _sanitize_output(chunk.text)
+                    token_count += len(chunk.text.split())
+                    yield sanitized
         except Exception as e:
             yield f"\n\nUnable to stream from AI model: {str(e)}"
+        finally:
+            _record_usage(uid, token_count)
             
     return StreamingResponse(
         generate(),

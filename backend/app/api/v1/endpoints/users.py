@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.core.database import get_db
-from app.core.security import get_current_user, require_role
+from app.core.security import get_current_user, require_role, rate_limit
 from app.models.models import User
 from typing import Dict, Optional
 from datetime import datetime
@@ -98,6 +98,7 @@ async def update_profile(
 async def bootstrap_profile(
     current_user: Dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    _: bool = Depends(rate_limit(10, 60)),  # 10 req/min per IP
 ):
     """Create a user profile if one doesn't exist yet (idempotent)."""
     result = await db.execute(select(User).where(User.id == current_user["id"]))

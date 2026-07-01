@@ -1,18 +1,52 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError, jwk
 from jose.utils import base64url_decode
 from app.core.config import settings
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 import httpx
 import json as json_lib
 import time
+from collections import defaultdict
 
 security_scheme = HTTPBearer()
 
-# ── JWKS cache ──────────────────────────────────────────────
-_jwks_cache: dict = {}  # {kid: (rsa_key, fetched_at)}
-_JWKS_CACHE_TTL = 3600  # re-fetch every hour
+# ── Rate limiter (in-memory sliding window) ─────────────────
+# Production: replace with Redis-based limiter
+_rate_limit_store: dict = {}  # {key: [(timestamp, count), ...]}
+
+def rate_limit(max_requests: int = 60, window_seconds: int = 60):
+    """
+    In-memory sliding window rate limiter.
+    Usage: @router.get("/path") or as Depends(rate_limit(30, 60))
+    
+    Falls back gracefully when Redis is unavailable.
+    For distributed rate limiting, use Upstash Redis instead.
+    """
+    async def _rate_limit(request: Request):
+        client_ip = request.client.host if request.client else "unknown"
+        key = f"rl:{client_ip}:{request.url.path}"
+        now = time.time()
+        
+        # Clean old entries
+        if key in _rate_limit_store:
+            _rate_limit_store[key] = [
+                t for t in _rate_limit_store[key] 
+                if now - t < window_seconds
+            ]
+        
+        window = _rate_limit_store.get(key, [])
+        if len(window) >= max_requests:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many requests. Please try again later."
+            )
+        
+        window.append(now)
+        _rate_limit_store[key] = window
+        return True
+    
+    return _rate_limit
 SUPABASE_JWKS_URL = f"{settings.SUPABASE_URL}/.well-known/jwks.json" if settings.SUPABASE_URL else None
 
 
