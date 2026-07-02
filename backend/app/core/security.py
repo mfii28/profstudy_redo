@@ -113,7 +113,7 @@ async def _verify_supabase_token(token: str) -> Optional[Dict]:
         return {
             "id": payload.get("sub"),
             "email": payload.get("email", ""),
-            "role": payload.get("role", "student"),
+            "role": payload.get("user_metadata", {}).get("role") or payload.get("role", "student"),
         }
     except Exception:
         return None
@@ -158,20 +158,18 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
     # For production, make get_current_user async and await JWKS verification.
     
     # ── Try 3: Unverified decode (extracts user identity from JWT claims) ────
-    # The Supabase JWT is signed with RS256 using Supabase's private key.
-    # We decode without verification because:
-    #   1. The token was already verified by Supabase Auth on the client
-    #   2. The adminDb shim also verifies tokens
-    #   3. Proper JWKS verification requires an async context
-    # For production at scale, refactor get_current_user to be async.
+    # NOTE: Supabase JWT has role="authenticated" at the top level (built-in claim).
+    # The REAL role is in user_metadata.role. We check user_metadata first.
     try:
         payload = jwt.decode(token, None, options={"verify_signature": False})
         sub = payload.get("sub")
         if sub:
+            user_meta = payload.get("user_metadata", {}) or {}
+            role = user_meta.get("role") or payload.get("role", "student")
             return {
                 "id": sub,
                 "email": payload.get("email", ""),
-                "role": payload.get("role", "student"),
+                "role": role,
             }
     except JWTError:
         pass
@@ -183,10 +181,12 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
             padded = parts[1] + "=" * (4 - len(parts[1]) % 4)
             decoded = json_lib.loads(base64url_decode(padded))
             if decoded.get("sub") or decoded.get("uid"):
+                user_meta = decoded.get("user_metadata", {}) or {}
+                role = user_meta.get("role") or decoded.get("role", "student")
                 return {
                     "id": decoded.get("sub") or decoded.get("uid"),
                     "email": decoded.get("email", ""),
-                    "role": decoded.get("role", "student"),
+                    "role": role,
                 }
     except Exception:
         pass
