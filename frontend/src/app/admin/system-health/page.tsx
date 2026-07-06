@@ -31,7 +31,7 @@ export default function AdminSystemHealthPage() {
   const { toast } = useToast();
   const [services, setServices] = useState<ServiceCheck[]>([
     { name: 'PostgreSQL (API)', description: 'Backend database connectivity', status: 'checking', icon: <Database className="h-5 w-5" /> },
-    { name: 'Supabase Auth', description: 'Authentication service', status: 'checking', icon: <Server className="h-5 w-5" /> },
+    { name: 'Firebase Auth', description: 'Authentication service', status: 'checking', icon: <Server className="h-5 w-5" /> },
     { name: 'Storage (R2)', description: 'Media storage backend', status: 'checking', icon: <Zap className="h-5 w-5" /> },
     { name: 'Next.js Application', description: 'Web server / edge runtime', status: 'checking', icon: <Globe className="h-5 w-5" /> },
   ]);
@@ -84,7 +84,7 @@ export default function AdminSystemHealthPage() {
 
     setServices([
       { name: 'PostgreSQL (API)', description: 'Backend database connectivity', status: apiStatus, latencyMs: apiLatency, icon: <Database className="h-5 w-5" /> },
-      { name: 'Supabase Auth', description: 'Authentication service', status: authStatus, latencyMs: undefined, icon: <Server className="h-5 w-5" /> },
+      { name: 'Firebase Auth', description: 'Authentication service', status: authStatus, latencyMs: undefined, icon: <Server className="h-5 w-5" /> },
       { name: 'Storage (R2)', description: 'Media storage backend', status: storageStatus, latencyMs: storageLatency, icon: <Zap className="h-5 w-5" /> },
       { name: 'Next.js Application', description: 'Web server / edge runtime', status: appStatus, latencyMs: appLatency, icon: <Globe className="h-5 w-5" /> },
     ]);
@@ -162,7 +162,7 @@ export default function AdminSystemHealthPage() {
         <CardContent>
           <ul className="text-sm space-y-1 text-muted-foreground list-disc pl-5">
             <li><strong>Vercel Dashboard</strong> — deployment metrics, function logs, edge latency</li>
-            <li><strong>Supabase Dashboard</strong> — database connections, replication lag, auth metrics</li>
+            <li><strong>Firebase Console</strong> — database connections, replication lag, auth metrics</li>
             <li><strong>Sentry / BetterStack</strong> — error tracking (set SENTRY_DSN env var)</li>
             <li><strong>Datadog / Grafana Cloud</strong> — infrastructure telemetry (optional)</li>
           </ul>

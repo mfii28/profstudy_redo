@@ -34,7 +34,7 @@ import { useUser } from '@/firebase';
 import { getPresignedDownloadUrl } from '@/app/actions/storage';
 import { getNotifications, markAsRead, subscribeToNotifications } from '@/lib/notifications-data';
 import type { Notification } from '@/lib/db';
-import { getUserProfileAction } from '@/app/actions/user';
+import { apiFetch } from '@/lib/api-client';
 
 export default function TutorDashboardLayout({
   children,
@@ -71,10 +71,11 @@ export default function TutorDashboardLayout({
       if (!isLoading && currentUser && mounted) {
         setVerifyError(null);
         try {
-          const res = await getUserProfileAction();
+          const res = await apiFetch('/users/profile');
+          const data = await res.json();
           if (cancelled) return;
-          if (res.success && res.user) {
-            const profile = res.user;
+          if (res.ok && data.success && data.user) {
+            const profile = data.user;
             if (profile.role === 'tutor') {
               setTutorProfile(profile);
               

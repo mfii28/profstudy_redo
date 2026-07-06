@@ -4,7 +4,7 @@ import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { CheckCircle, XCircle, Loader } from 'lucide-react';
-import { updateUserEmailPreferences } from '@/app/actions/user';
+
 
 function UnsubscribeContent() {
   const searchParams = useSearchParams();
@@ -22,8 +22,13 @@ function UnsubscribeContent() {
       }
 
       try {
-        const result = await updateUserEmailPreferences(token, { subscribedToMarketing: false, subscribedToTransactional: false });
-        if (result.success) {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/users/email-preferences`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, preferences: { subscribedToMarketing: false, subscribedToTransactional: false } })
+        });
+        const result = await res.json();
+        if (res.ok && result.success) {
           setStatus('success');
           setMessage('You have been successfully unsubscribed from all emails.');
         } else {

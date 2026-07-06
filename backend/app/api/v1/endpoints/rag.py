@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, text
 from app.core.database import get_db
 from app.core.config import settings
 from app.core.security import get_current_user
-from app.models.models import Course, CourseRagSource, TutorDetail, Order, User
+from app.models.models import Course, CourseRagSource, CourseRagChunk, TutorDetail, Order, User
 from app.services.r2_service import r2_service
 import hashlib
 import httpx
@@ -17,6 +17,7 @@ from datetime import datetime
 import google.generativeai as genai
 import json
 import re
+import uuid
 
 router = APIRouter()
 
@@ -128,6 +129,51 @@ def replace_or_append_source_section(existing_markdown: str, source_label: str, 
         result = f"## Source: {source_label.strip()}\n{new_content.strip()}"
     return result
 
+async def generate_embeddings_and_store(db: AsyncSession, course_id: str, source_id: str, content: str):
+    # Split text into paragraphs (chunks)
+    paragraphs = re.split(r'\n\s*\n', content)
+    chunks = []
+    for para in paragraphs:
+        para = para.strip()
+        if len(para) > 20:
+            chunks.append(para)
+            
+    if not chunks:
+        return 0
+
+    # Ensure vector extension exists
+    await db.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+
+    # Remove old chunks for this source
+    await db.execute(text("DELETE FROM \"CourseRagChunk\" WHERE \"sourceId\" = :sid"), {"sid": source_id})
+
+    # Generate embeddings
+    genai.configure(api_key=settings.GEMINI_API_KEY)
+    chunk_count = 0
+    for idx, chunk_text in enumerate(chunks):
+        try:
+            result = genai.embed_content(
+                model="models/text-embedding-004",
+                content=chunk_text,
+                task_type="retrieval_document"
+            )
+            embedding = result['embedding']
+            
+            rag_chunk = CourseRagChunk(
+                id=f"chunk-{uuid.uuid4().hex[:12]}",
+                courseId=course_id,
+                sourceId=source_id,
+                chunkIndex=idx,
+                text=chunk_text,
+                embedding=embedding
+            )
+            db.add(rag_chunk)
+            chunk_count += 1
+        except Exception as e:
+            print(f"Failed to embed chunk {idx}: {e}")
+            
+    return chunk_count
+
 async def get_course_markdown_text(course_id: str) -> str:
     key = f"private/courses/{course_id}/rag/materials.md"
     try:
@@ -192,21 +238,27 @@ async def ingest_text(
     
     if existing_source:
         existing_source.contentHash = content_hash
-        existing_source.chunkCount = 1
         existing_source.updatedAt = datetime.utcnow()
+        await db.flush()
+        chunk_count = await generate_embeddings_and_store(db, course_id, existing_source.id, normalized_text)
+        existing_source.chunkCount = chunk_count
     else:
+        new_source_id = f"rag-{course_id}-{sha256_hex(safe_source)[:12]}"
         rag_source = CourseRagSource(
-            id=f"rag-{course_id}-{sha256_hex(safe_source)[:12]}",
+            id=new_source_id,
             courseId=course_id,
             sourceFile=safe_source,
             contentHash=content_hash,
-            chunkCount=1,
+            chunkCount=0,
             updatedAt=datetime.utcnow(),
             createdAt=datetime.utcnow(),
         )
         db.add(rag_source)
+        await db.flush()
+        chunk_count = await generate_embeddings_and_store(db, course_id, new_source_id, normalized_text)
+        rag_source.chunkCount = chunk_count
     await db.flush()
-    return {"ok": True, "chunkCount": 1}
+    return {"ok": True, "chunkCount": chunk_count}
 
 @router.post("/course/{course_id}/ingest-file")
 async def ingest_file(
@@ -272,21 +324,27 @@ async def ingest_file(
     
     if existing_source:
         existing_source.contentHash = content_hash
-        existing_source.chunkCount = 1
         existing_source.updatedAt = datetime.utcnow()
+        await db.flush()
+        chunk_count = await generate_embeddings_and_store(db, course_id, existing_source.id, extracted_text)
+        existing_source.chunkCount = chunk_count
     else:
+        new_source_id = f"rag-{course_id}-{sha256_hex(safe_source)[:12]}"
         rag_source = CourseRagSource(
-            id=f"rag-{course_id}-{sha256_hex(safe_source)[:12]}",
+            id=new_source_id,
             courseId=course_id,
             sourceFile=safe_source,
             contentHash=content_hash,
-            chunkCount=1,
+            chunkCount=0,
             updatedAt=datetime.utcnow(),
             createdAt=datetime.utcnow(),
         )
         db.add(rag_source)
+        await db.flush()
+        chunk_count = await generate_embeddings_and_store(db, course_id, new_source_id, extracted_text)
+        rag_source.chunkCount = chunk_count
     await db.flush()
-    return {"ok": True, "chunkCount": 1}
+    return {"ok": True, "chunkCount": chunk_count}
 
 @router.get("/course/{course_id}/stats")
 async def get_rag_stats(
@@ -373,54 +431,45 @@ async def retrieve_course_chunks(
     if not has_access:
         raise HTTPException(status_code=403, detail="Permission denied.")
     
-    # Get the markdown text from R2
-    markdown_text = await get_course_markdown_text(course_id)
-    if not markdown_text or not markdown_text.strip():
-        return {"ok": True, "chunks": [], "totalChunks": 0}
-    
-    # Split markdown into chunks by source sections
-    sources = re.split(r'\n## Source: ', '\n' + markdown_text)
-    chunks = []
-    
-    for i, source in enumerate(sources):
-        if not source.strip():
-            continue
-        lines = source.strip().split('\n')
-        doc_name = lines[0].strip() if i > 0 else "Course materials (Combined)"
-        content = '\n'.join(lines[1:]) if i > 0 else source.strip()
+    # Ensure vector extension exists
+    await db.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+
+    # Embed query
+    genai.configure(api_key=settings.GEMINI_API_KEY)
+    try:
+        query_res = genai.embed_content(
+            model="models/text-embedding-004",
+            content=query,
+            task_type="retrieval_query"
+        )
+        query_embedding = query_res['embedding']
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to embed query: {e}")
         
-        # Further split large sections into paragraphs
-        paragraphs = re.split(r'\n\s*\n', content)
-        for j, para in enumerate(paragraphs):
-            para = para.strip()
-            if len(para) < 20:
-                continue
-            chunks.append({
-                "text": para,
-                "docName": doc_name,
-                "chunkIndex": i * 100 + j,
-                "score": 0.0,
-            })
+    # Perform vector search using cosine distance (<=>)
+    # Cosine distance is used because it works well with text embeddings
+    stmt = (
+        select(CourseRagChunk, CourseRagSource)
+        .join(CourseRagSource, CourseRagChunk.sourceId == CourseRagSource.id)
+        .where(CourseRagChunk.courseId == course_id)
+        .order_by(CourseRagChunk.embedding.cosine_distance(query_embedding))
+        .limit(top_k)
+    )
     
-    # Score chunks by keyword overlap
-    query_lower = query.lower()
-    query_terms = set(query_lower.split())
+    result = await db.execute(stmt)
+    rows = result.all()
     
-    for chunk in chunks:
-        text_lower = chunk["text"].lower()
-        term_matches = sum(1 for t in query_terms if t in text_lower)
-        # Boost for exact phrase match
-        phrase_boost = 2.0 if query_lower in text_lower else 0.0
-        chunk["score"] = (term_matches / max(len(query_terms), 1)) + phrase_boost
-    
-    # Sort by score descending
-    chunks.sort(key=lambda c: c["score"], reverse=True)
-    
-    # Return top_k
-    top_chunks = chunks[:top_k]
+    top_chunks = []
+    for chunk, source in rows:
+        top_chunks.append({
+            "text": chunk.text,
+            "docName": source.sourceFile,
+            "chunkIndex": chunk.chunkIndex,
+            "score": 1.0, # Approximate score, could be computed from distance if needed
+        })
     
     return {
         "ok": True,
         "chunks": top_chunks,
-        "totalChunks": len(chunks),
+        "totalChunks": len(top_chunks),
     }

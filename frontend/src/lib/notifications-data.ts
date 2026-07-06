@@ -43,35 +43,24 @@ export const subscribeToNotifications = (
 ): (() => void) => {
     if (!userId || typeof window === 'undefined') return () => {};
 
-    // Dynamic import to avoid SSR issues
-    let channel: any = null;
-
-    import('@/lib/supabase-client').then(({ supabase }) => {
-      channel = supabase
-        .channel('notifications-realtime')
-        .on(
-          'postgres_changes' as any,
-          {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'Notification',
-            filter: `userId=eq.${userId}`,
-          },
-          (payload: any) => {
-            const newNotif = payload.new as Notification;
-            if (newNotif) {
-              callback([newNotif]);
+    // Use polling since Firebase Firestore isn't connected and PostgreSQL doesn't have realtime setup for this
+    const poll = async () => {
+        try {
+            const notifications = await getNotifications(userId);
+            if (notifications.length > 0) {
+                // Since this is a simple polling, we can't reliably trigger only on *new* notifications
+                // The consumer of this hook must handle deduplication.
+                callback(notifications);
             }
-          }
-        )
-        .subscribe();
-    });
-
-    return () => {
-      import('@/lib/supabase-client').then(({ supabase }) => {
-        if (channel) supabase.removeChannel(channel);
-      });
+        } catch (e) {
+            if (onError) onError(e);
+        }
     };
+
+    poll();
+    const interval = setInterval(poll, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
 };
 
 export const markAsRead = async (notificationId: string): Promise<void> => {

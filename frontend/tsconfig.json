@@ -21,9 +21,7 @@
     ],
     "paths": {
       "@/*": ["./src/*"],
-      "firebase/app": ["./src/firebase/compat/app"],
-      "firebase/firestore": ["./src/firebase/compat/firestore"],
-      "firebase/auth": ["./src/firebase/compat/auth"]
+
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

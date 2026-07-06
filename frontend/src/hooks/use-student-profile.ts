@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import type { User as AppUser } from '@/lib/db';
 import { useUser } from '@/firebase';
 import { buildDefaultUserProfile } from '@/lib/user-data';
-import { getUserProfileAction, bootstrapUserProfile } from '@/app/actions/user';
+import { apiFetch } from '@/lib/api-client';
 
 export function useStudentProfile() {
   const { user, isLoading: isAuthLoading } = useUser();
@@ -25,21 +25,21 @@ export function useStudentProfile() {
     const loadProfile = async () => {
       setIsProfileLoading(true);
       try {
-        // Ensure profile exists
+        // Bootstrap profile
         try {
-          const idToken = await user.getIdToken();
-          await bootstrapUserProfile(idToken);
+          await apiFetch('/bootstrap', { method: 'POST' });
         } catch (bootstrapErr) {
           console.warn('[StudentProfile] Bootstrap failed:', bootstrapErr);
         }
 
-        const res = await getUserProfileAction();
+        const res = await apiFetch('/profile');
+        const data = await res.json();
         if (!active) return;
 
-        if (res.success && res.user) {
+        if (res.ok && data.success && data.user) {
           setProfile({
-            ...res.user,
-            uid: res.user.id,
+            ...data.user,
+            uid: data.user.id,
             emailVerified: true,
             createdAt: new Date(),
             updatedAt: new Date(),

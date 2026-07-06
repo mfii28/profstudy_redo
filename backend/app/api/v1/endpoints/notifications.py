@@ -143,3 +143,45 @@ async def broadcast_notification(
 
     await db.flush()
     return {"success": True, "notifiedCount": notified_count}
+
+@router.post("/broadcast/course")
+async def broadcast_course_notification(
+    data: Dict,
+    current_user: Dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Broadcast a notification to all students in a course."""
+    caller_role = current_user.get("role", "student")
+    if caller_role not in ("admin", "superadmin", "subadmin", "tutor"):
+        raise HTTPException(status_code=403, detail="Unauthorized")
+
+    course_id = data.get("courseId")
+    title = data.get("title", "")
+    message = data.get("message", "")
+
+    if not course_id or not title or not message:
+        raise HTTPException(status_code=400, detail="courseId, title and message are required")
+
+    result = await db.execute(select(User).limit(1000))
+    users = result.scalars().all()
+    
+    now = datetime.utcnow()
+    notified_count = 0
+    
+    for user in users:
+        enrollments = user.enrollments or []
+        if any(e.get("courseId") == course_id for e in enrollments):
+            notif = Notification(
+                id=f"notif-{now.timestamp()}-{random.randint(1000, 9999)}",
+                userId=user.id,
+                title=title,
+                message=message,
+                isRead=False,
+                createdAt=now,
+            )
+            db.add(notif)
+            notified_count += 1
+            
+    await db.flush()
+    return {"success": True, "notifiedCount": notified_count}
+

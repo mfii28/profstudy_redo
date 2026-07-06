@@ -4,7 +4,7 @@ import React from 'react';
 import { Loader2 } from 'lucide-react';
 import { useUser } from '@/firebase';
 import { useRouter } from 'next/navigation';
-import { getUserProfileAction } from '@/app/actions/user';
+import { apiFetch } from '@/lib/api-client';
 
 export default function ClassroomLayout({
   children,
@@ -32,9 +32,10 @@ export default function ClassroomLayout({
 
     const verifyAdminAccess = async () => {
       try {
-        const res = await getUserProfileAction();
-        if (res.success && res.user) {
-          const profile = res.user;
+        const res = await apiFetch('/users/profile');
+        const data = await res.json();
+        if (res.ok && data.success && data.user) {
+          const profile = data.user;
           const role = String(profile.role || '').trim().toLowerCase();
           if (['admin', 'subadmin', 'superadmin'].includes(role)) {
             setAdminProfile(profile);

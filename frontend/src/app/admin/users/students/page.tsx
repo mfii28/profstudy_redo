@@ -30,13 +30,13 @@ import { Button } from '@/components/ui/button';
 import { type User } from '@/lib/db';
 import { resolveAvatarUrl } from '@/lib/media-url';
 import { getUsers } from '@/lib/user-data';
-import { createStudentAccount } from '@/app/actions/user';
 import { formatDistanceToNow } from 'date-fns';
 import { useState, useEffect, useCallback } from 'react';
 import { Loader2, Users, Clock, BookOpen, UserPlus, Eye, EyeOff } from 'lucide-react';
 import { EmptyState } from '@/components/dashboard/empty-state';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/firebase';
+import { apiFetch } from '@/lib/api-client';
 
 export default function AdminStudentsPage() {
   const { user } = useUser();
@@ -90,17 +90,19 @@ export default function AdminStudentsPage() {
 
     setIsSubmitting(true);
     try {
-      const idToken = await user.getIdToken(true);
-      const result = await createStudentAccount({
-        name: form.name.trim(),
-        email: form.email.trim().toLowerCase(),
-        phone: form.phone.trim() || undefined,
-        password: form.password || undefined,
-        idToken,
+      const res = await apiFetch('/users/create-student', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: form.name.trim(),
+          email: form.email.trim().toLowerCase(),
+          phone: form.phone.trim() || undefined,
+          password: form.password || undefined,
+        })
       });
+      const data = await res.json();
 
-      if (result.error) {
-        toast({ variant: 'destructive', title: 'Failed to create student', description: result.error });
+      if (!res.ok || !data.success) {
+        toast({ variant: 'destructive', title: 'Failed to create student', description: data.error || 'Unknown error' });
         return;
       }
 

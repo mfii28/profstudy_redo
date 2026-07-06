@@ -2,18 +2,21 @@
 
 /**
  * Shared API client for calling the Python backend.
- * Automatically attaches Supabase JWT when available (client-side only).
+ * Automatically attaches Firebase JWT when available (client-side only).
  */
 
 const BASE_API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/+$/, '');
 
 async function getClientToken(): Promise<string | undefined> {
   try {
-    // Dynamic import ensures @supabase/ssr is only loaded on the client
-    const mod = await import('@/lib/supabase-client');
-    const { data: { session } } = await mod.supabase.auth.getSession();
-    return session?.access_token;
-  } catch {
+    const { auth } = await import('@/firebase/client');
+    await auth.authStateReady();
+    if (auth.currentUser) {
+      return await auth.currentUser.getIdToken();
+    }
+    return undefined;
+  } catch (err) {
+    console.error("Error getting Firebase token", err);
     return undefined;
   }
 }

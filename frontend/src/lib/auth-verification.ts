@@ -13,8 +13,8 @@ export function profileRequiresEmailVerification(appUser: Pick<AppUser, 'role' |
 }
 
 /** JWT custom claim used by middleware for the verification gate. */
-export async function claimRequiresEmailVerification(supabaseUser: { id: string; email?: string }): Promise<boolean> {
-  // Email verification gate - simplified for Supabase
+export async function claimRequiresEmailVerification(firebaseUser: { id: string; email?: string }): Promise<boolean> {
+  // Email verification gate - simplified
   return false;
 }
 
@@ -31,7 +31,7 @@ export async function requiresEmailVerification(
 }
 
 export async function refreshSessionCookie(_firebaseUser: { uid: string }): Promise<void> {
-  // Simplified for Supabase — session managed by @supabase/ssr
+  // Session managed by Firebase Auth
 }
 
 export function getRoleDashboardPath(role?: string): string {

@@ -73,5 +73,68 @@ class R2Service:
             print(f"Error deleting object: {e}")
             return False
 
+    def initiate_multipart_upload(self, object_key: str, content_type: str) -> Optional[str]:
+        if not self.client or not self.bucket_name:
+            return None
+        try:
+            response = self.client.create_multipart_upload(
+                Bucket=self.bucket_name,
+                Key=object_key,
+                ContentType=content_type
+            )
+            return response.get('UploadId')
+        except ClientError as e:
+            print(f"Error initiating multipart upload: {e}")
+            return None
+
+    def generate_presigned_part_url(self, object_key: str, upload_id: str, part_number: int, expiration: int = 3600) -> Optional[str]:
+        if not self.client or not self.bucket_name:
+            return None
+        try:
+            url = self.client.generate_presigned_url(
+                ClientMethod='upload_part',
+                Params={
+                    'Bucket': self.bucket_name,
+                    'Key': object_key,
+                    'UploadId': upload_id,
+                    'PartNumber': part_number
+                },
+                ExpiresIn=expiration
+            )
+            return url
+        except ClientError as e:
+            print(f"Error generating presigned part URL: {e}")
+            return None
+
+    def complete_multipart_upload(self, object_key: str, upload_id: str, parts: list) -> bool:
+        if not self.client or not self.bucket_name:
+            return False
+        try:
+            # parts is a list of dicts: [{'PartNumber': 1, 'ETag': '"..."'}, ...]
+            self.client.complete_multipart_upload(
+                Bucket=self.bucket_name,
+                Key=object_key,
+                UploadId=upload_id,
+                MultipartUpload={'Parts': parts}
+            )
+            return True
+        except ClientError as e:
+            print(f"Error completing multipart upload: {e}")
+            return False
+
+    def abort_multipart_upload(self, object_key: str, upload_id: str) -> bool:
+        if not self.client or not self.bucket_name:
+            return False
+        try:
+            self.client.abort_multipart_upload(
+                Bucket=self.bucket_name,
+                Key=object_key,
+                UploadId=upload_id
+            )
+            return True
+        except ClientError as e:
+            print(f"Error aborting multipart upload: {e}")
+            return False
+
 # Instantiate a single global service instance
 r2_service = R2Service()

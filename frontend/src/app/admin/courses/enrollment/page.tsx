@@ -14,7 +14,7 @@ import { getCourses } from "@/lib/course-data";
 import { type Course, type GlobalSettings } from "@/lib/db";
 import { useUser } from "@/firebase";
 import { logAdminAction } from "@/lib/audit-data";
-import { bulkEnrollUsersInCourseByAdmin, enrollUserInCourseByAdmin, findUserForManualEnrollment, searchUsersForManualEnrollment, recordManualPayment } from "@/app/actions/admin-enrollment";
+import { apiFetch } from "@/lib/api-client";
 import { defaultGlobalSettings, getGlobalSettings } from "@/lib/platform-settings-data";
 
 function WhatsAppIcon({ className = "h-4 w-4" }: { className?: string }) {
@@ -93,10 +93,10 @@ export default function AdminManualEnrollmentPage() {
     
     setIsFetchingStudents(true);
     try {
-      const idToken = await adminUser!.getIdToken(true);
-      const result = await searchUsersForManualEnrollment(idToken, '', 500);
-      if ('error' in result) {
-        toast({ variant: 'destructive', title: 'Failed to load students', description: result.error });
+      const res = await apiFetch('/admin/users', { method: 'GET' });
+      const result = await res.json();
+      if (!res.ok || result.error) {
+        toast({ variant: 'destructive', title: 'Failed to load students', description: result.error || 'Failed' });
         return;
       }
       setAllStudents(result.users);
@@ -121,14 +121,18 @@ export default function AdminManualEnrollmentPage() {
     setIsVerifying(true);
     setFoundUser(null);
     try {
-      const idToken = await adminUser.getIdToken(true);
-      const result = await findUserForManualEnrollment(idToken, normalizedEmail);
-      if ('error' in result) {
-        toast({ variant: 'destructive', title: 'User Not Found', description: result.error });
+      const res = await apiFetch('/admin/users/search', {
+        method: 'POST',
+        body: JSON.stringify({ query: normalizedEmail, max: 1 })
+      });
+      const result = await res.json();
+      
+      if (!res.ok || result.error || !result.users?.length) {
+        toast({ variant: 'destructive', title: 'User Not Found', description: result.error || 'No match found' });
         return;
       }
       setUserEmail(normalizedEmail);
-      setFoundUser(result.user);
+      setFoundUser(result.users[0]);
       toast({ title: 'Student Identity Verified' });
     } catch (e) {
       toast({ variant: 'destructive', title: 'Verification Error', description: 'Unable to query user records right now.' });
@@ -141,10 +145,14 @@ export default function AdminManualEnrollmentPage() {
     if (!adminUser || !userEmail.trim()) return;
     setIsSearching(true);
     try {
-      const idToken = await adminUser.getIdToken(true);
-      const result = await searchUsersForManualEnrollment(idToken, userEmail.trim(), 20);
-      if ('error' in result) {
-        toast({ variant: 'destructive', title: 'Search failed', description: result.error });
+      const res = await apiFetch('/admin/users/search', {
+        method: 'POST',
+        body: JSON.stringify({ query: userEmail.trim(), max: 20 })
+      });
+      const result = await res.json();
+      
+      if (!res.ok || result.error) {
+        toast({ variant: 'destructive', title: 'Search failed', description: result.error || 'Request failed' });
         return;
       }
       setSearchResults(result.users);
@@ -164,9 +172,13 @@ export default function AdminManualEnrollmentPage() {
 
     setIsLoading(true);
     try {
-      const idToken = await adminUser.getIdToken(true);
-      const result = await enrollUserInCourseByAdmin(idToken, foundUser.id, selectedCourseId);
-      if (!('error' in result)) {
+      const res = await apiFetch('/admin/enrollments/enroll', {
+        method: 'POST',
+        body: JSON.stringify({ userId: foundUser.id, courseId: selectedCourseId })
+      });
+      const result = await res.json();
+      
+      if (res.ok && !result.error) {
         const courseName = courses.find(c => c.id === selectedCourseId)?.title || "the course";
         
         // SECURITY: Audit the manual override
@@ -185,7 +197,7 @@ export default function AdminManualEnrollmentPage() {
         setFoundUser(null);
         setSelectedCourseId('');
       } else {
-        toast({ variant: "destructive", title: "Failed", description: result.error });
+        toast({ variant: "destructive", title: "Failed", description: result.error || 'Failed' });
       }
     } catch (error) {
        toast({ variant: "destructive", title: "Error" });
@@ -200,11 +212,17 @@ export default function AdminManualEnrollmentPage() {
       return;
     }
     setIsLoading(true);
-    try {
-      const idToken = await adminUser.getIdToken(true);
-      const result = await bulkEnrollUsersInCourseByAdmin(idToken, selectedUsers.map((u) => u.id), selectedCourseId);
-      if ('error' in result) {
-        toast({ variant: "destructive", title: "Bulk enrollment failed", description: result.error });
+      const res = await apiFetch('/admin/enrollments/bulk-enroll', {
+        method: 'POST',
+        body: JSON.stringify({
+          userIds: selectedUsers.map((u) => u.id),
+          courseId: selectedCourseId
+        })
+      });
+      const result = await res.json();
+      
+      if (!res.ok || result.error) {
+        toast({ variant: "destructive", title: "Bulk enrollment failed", description: result.error || 'Request failed' });
         return;
       }
       
@@ -250,22 +268,23 @@ export default function AdminManualEnrollmentPage() {
 
     setIsRecordingPayment(true);
     try {
-      const idToken = await adminUser.getIdToken(true);
       const amount = parseFloat(manualPaymentAmount);
       
-      const result = await recordManualPayment(
-        idToken,
-        selectedUsers.map(u => u.id),
-        selectedCourseId,
-        amount,
-        manualPaymentMethod,
-        manualPaymentNote
-      );
-
-      if ('error' in result) {
-        toast({ variant: "destructive", title: "Payment recording failed", description: result.error });
-        return;
-      }
+      const results = await Promise.all(selectedUsers.map(async (u) => {
+         const res = await apiFetch('/admin/payments/manual', {
+           method: 'POST',
+           body: JSON.stringify({
+             userId: u.id,
+             courseId: selectedCourseId,
+             amount: amount,
+             method: manualPaymentMethod,
+             note: manualPaymentNote
+           })
+         });
+         const data = await res.json();
+         if (!res.ok) throw new Error(data.error || 'Failed to record payment');
+         return data;
+      }));
 
       // Log audit trail
       const courseName = courses.find(c => c.id === selectedCourseId)?.title || "a course";

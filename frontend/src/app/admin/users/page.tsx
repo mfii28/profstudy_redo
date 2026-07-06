@@ -18,6 +18,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { resolveAvatarUrl } from '@/lib/media-url';
+import { apiFetch } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -267,12 +268,15 @@ export default function AdminUsersPage() {
         return;
       }
       
-      const idToken = await adminUser.getIdToken();
-      const { setRole } = await import('@/app/actions/user');
-      const result = await setRole(user.id, newRole, idToken);
+      const result = await apiFetch('/users/role', {
+        method: 'PUT',
+        body: JSON.stringify({ targetUid: user.id, role: newRole })
+      });
 
-      if ('error' in result) {
-        toast({ variant: 'destructive', title: 'Role update failed', description: result.error });
+      const resData = await result.json();
+
+      if (!result.ok || !resData.success) {
+        toast({ variant: 'destructive', title: 'Role update failed', description: resData.detail || 'Failed to update role' });
         return;
       }
       

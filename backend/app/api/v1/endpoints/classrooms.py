@@ -113,3 +113,71 @@ async def get_classroom(
     if not classroom:
         raise HTTPException(status_code=404, detail="Classroom not found")
     return {"classroom": _classroom_to_dict(classroom)}
+
+@router.get("/{course_id}/members")
+async def get_classroom_members(
+    course_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get detailed member info for a classroom."""
+    result = await db.execute(select(Classroom).where(Classroom.id == course_id))
+    classroom = result.scalar_one_or_none()
+    if not classroom:
+        return {"members": []}
+
+    enrolled_ids = classroom.enrolledStudentIds or []
+    if not enrolled_ids:
+        return {"members": []}
+
+    # Fetch user details
+    users_result = await db.execute(select(User).where(User.id.in_(enrolled_ids)))
+    users = users_result.scalars().all()
+    
+    members = []
+    for u in users:
+        members.append({
+            "userId": u.id,
+            "name": u.name,
+            "role": u.role,
+            "avatarUrl": u.avatarUrl,
+            "classroomRole": "classroom-author" if u.role in ["tutor", "instructor"] else "classroom-student"
+        })
+    
+    return {"members": members}
+
+
+@router.post("/{course_id}/presence")
+async def update_user_presence(
+    course_id: str,
+    data: Dict,
+    current_user: Dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update user presence status (online, away, dnd)."""
+    status = data.get("status", "online")
+    # In a full implementation, we would store this in a cache (e.g. Redis) or DB.
+    # For now, return success to satisfy the frontend polling.
+    return {"success": True, "status": status}
+
+
+@router.get("/{course_id}/users/{user_id}")
+async def get_classroom_user_profile(
+    course_id: str,
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get a specific user's profile for the classroom UI."""
+    user_result = await db.execute(select(User).where(User.id == user_id))
+    user = user_result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    return {
+        "profile": {
+            "userId": user.id,
+            "name": user.name,
+            "role": user.role,
+            "avatarUrl": user.avatarUrl,
+            "bio": user.bio
+        }
+    }

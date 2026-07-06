@@ -80,7 +80,20 @@ async def purchase_book(
 
     # For paid books, redirect to payment
     if book.price > 0:
-        return {"authorization_url": None, "reference": f"book-{book_id}-{int(datetime.utcnow().timestamp())}"}
+        from app.api.v1.endpoints.payments import initialize_transaction
+        payload = {
+            "email": current_user.get("email", ""),
+            "amount": float(book.price),
+            "metadata": {
+                "checkoutType": "book_purchase",
+                "userId": current_user["id"],
+                "bookId": book_id,
+                "bookTitle": book.title,
+                "bookType": book.type,
+                "shippingAddress": data.get("shippingAddress"),
+            }
+        }
+        return await initialize_transaction(payload, current_user, db)
 
     return {"error": "Cannot purchase a free book via this endpoint"}
 

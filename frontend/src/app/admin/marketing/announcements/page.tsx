@@ -28,7 +28,7 @@ import { getAnnouncements, saveAnnouncement, subscribeToAnnouncements } from '@/
 import { getUsers } from '@/lib/user-data';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/dashboard/empty-state';
-import { sendPlatformEmail } from '@/app/actions/email';
+import { sendPlatformEmail } from '@/lib/email-api';
 import { buildAnnouncementEmailHtml } from '@/lib/email-templates';
 import { broadcastAnnouncementNotification } from '@/app/actions/notifications';
 import { Badge } from '@/components/ui/badge';

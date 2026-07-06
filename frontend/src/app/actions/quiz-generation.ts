@@ -1,9 +1,8 @@
 'use server';
 
-import { generateQuiz } from '@/ai/flows/dynamic-quiz-generation-flow';
-import { ai } from '@/ai/genkit';
+import { apiFetchServer } from '@/lib/api-client.server';
+import { logger } from '@/lib/logging';
 import type { QuizQuestion } from '@/lib/db';
-import { z } from 'genkit';
 
 export async function generateQuizFromText(
     text: string,
@@ -11,15 +10,16 @@ export async function generateQuizFromText(
     questionCount: number = 5
 ): Promise<{ questions?: QuizQuestion[]; error?: string }> {
     if (!text.trim()) return { error: 'No content provided.' };
+    
     try {
-        const result = await generateQuiz({
-            topic: topic || 'General',
-            lessonContent: text,
-            numberOfQuestions: Math.min(Math.max(1, questionCount), 20),
-            difficulty: 'Medium',
+        const result = await apiFetchServer('/api/v1/ai/quiz', {
+            method: 'POST',
+            body: JSON.stringify({ text, topic, questionCount }),
         });
+        
         return { questions: result.quiz };
     } catch (err: any) {
+        logger.error('[Quiz AI] Text generation failed', { error: err.message });
         return { error: err.message || 'AI quiz generation failed.' };
     }
 }
@@ -33,52 +33,14 @@ export async function generateQuizFromFile(
     if (!base64) return { error: 'No file content provided.' };
 
     try {
-        if (mimeType === 'text/plain') {
-            const text = Buffer.from(base64, 'base64').toString('utf-8');
-            return generateQuizFromText(text, topic, questionCount);
-        }
-
-        const count = Math.min(Math.max(1, questionCount), 20);
-        const { output } = await ai.generate({
-            prompt: [
-                {
-                    media: {
-                        url: `data:${mimeType};base64,${base64}`,
-                    },
-                },
-                {
-                    text: `You are an expert quiz creator. Extract information from this document and generate ${count} multiple-choice quiz questions${topic ? ` about "${topic}"` : ''}.
-Each question must have 2 to 5 answer options and exactly one correct answer.
-Return valid JSON matching this schema:
-{
-  "quiz": [
-    {
-      "questionText": "string",
-      "options": ["string", "string", ...],
-      "correctAnswerIndex": number,
-      "explanation": "string"
-    }
-  ]
-}`,
-                },
-            ],
-            output: {
-                schema: z.object({
-                    quiz: z.array(
-                        z.object({
-                            questionText: z.string(),
-                            options: z.array(z.string()).min(2).max(5),
-                            correctAnswerIndex: z.number().int(),
-                            explanation: z.string().optional(),
-                        })
-                    ),
-                }),
-            },
+        const result = await apiFetchServer('/api/v1/ai/quiz', {
+            method: 'POST',
+            body: JSON.stringify({ fileBase64: base64, mimeType, topic, questionCount }),
         });
-
-        if (!output?.quiz) return { error: 'AI returned an empty quiz.' };
-        return { questions: output.quiz };
+        
+        return { questions: result.quiz };
     } catch (err: any) {
+        logger.error('[Quiz AI] File generation failed', { error: err.message });
         return { error: err.message || 'AI quiz generation from file failed.' };
     }
 }

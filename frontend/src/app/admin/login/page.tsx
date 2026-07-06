@@ -15,7 +15,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Logo } from '@/components/logo';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/lib/supabase-client';
+import { auth } from '@/firebase/client';
+import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 
 export default function AdminLoginPage() {
@@ -31,32 +32,21 @@ export default function AdminLoginPage() {
     setIsLoading(true);
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.toLowerCase().trim(),
-        password,
-      });
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
+        email.toLowerCase().trim(),
+        password
+      );
 
-      if (error) {
-        toast({
-          variant: 'destructive',
-          title: 'Login Failed',
-          description: error.message || 'Invalid email or password.',
-        });
-        setIsLoading(false);
-        return;
-      }
-
-      const user = data.user;
-      if (!user) throw new Error('No user data returned.');
-
-      const role = user.user_metadata?.role || 'student';
+      const user = userCredential.user;
+      const idTokenResult = await user.getIdTokenResult();
+      const role = idTokenResult.claims.role || 'student';
 
       if (['admin', 'superadmin', 'subadmin'].includes(role)) {
-        // Set cookie for compatibility
+        // Set cookie for FastAPI proxy compatibility
         const secure = window.location.protocol === 'https:' ? 'Secure;' : '';
-        const emailVerified = !!user.email_confirmed_at;
-        const mockSessionToken = btoa(JSON.stringify({ uid: user.id, role, emailVerified }));
-        document.cookie = `__session=${mockSessionToken}; path=/; max-age=3600; SameSite=Lax; ${secure}`;
+        const sessionToken = await user.getIdToken(true);
+        document.cookie = `__session=${sessionToken}; path=/; max-age=3600; SameSite=Lax; ${secure}`;
 
         toast({
           title: 'Login Successful',
@@ -64,7 +54,7 @@ export default function AdminLoginPage() {
         });
         router.replace('/admin');
       } else {
-        await supabase.auth.signOut();
+        await signOut(auth);
         toast({
           variant: 'destructive',
           title: 'Access Denied',

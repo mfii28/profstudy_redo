@@ -1,15 +1,13 @@
 'use server';
 
-import prisma from '@/lib/prisma';
+import { apiFetchServer } from '@/lib/api-client.server';
 import { type GlobalSettings, defaultGlobalSettings } from '@/lib/platform-settings-data';
 
 export async function getGlobalSettingsAction(forceRefresh = false): Promise<GlobalSettings> {
   try {
-    const record = await prisma.platformSettings.findUnique({
-      where: { id: 'master-config' }
-    });
-    if (record && record.settings) {
-      return { ...defaultGlobalSettings, ...(record.settings as any) };
+    const data = await apiFetchServer('/api/v1/admin/settings/master-config');
+    if (data && data.settings) {
+      return { ...defaultGlobalSettings, ...data.settings };
     }
     return defaultGlobalSettings;
   } catch (error) {
@@ -20,18 +18,12 @@ export async function getGlobalSettingsAction(forceRefresh = false): Promise<Glo
 
 export async function setGlobalSettingsAction(settings: GlobalSettings): Promise<void> {
   try {
-    await prisma.platformSettings.upsert({
-      where: { id: 'master-config' },
-      update: {
-        settings: settings as any,
-      },
-      create: {
-        id: 'master-config',
-        settings: settings as any,
-      }
+    await apiFetchServer('/api/v1/admin/settings/master-config', {
+      method: 'PUT',
+      body: JSON.stringify({ settings }),
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('setGlobalSettingsAction error:', error);
-    throw new Error('Database connection unavailable.');
+    throw new Error(error.message || 'Database connection unavailable.');
   }
 }

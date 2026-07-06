@@ -245,3 +245,76 @@ async def get_download_url(
         raise HTTPException(status_code=500, detail="Storage client initialization failed.")
         
     return {"url": url}
+
+from pydantic import BaseModel
+
+class MultipartInitiateRequest(BaseModel):
+    key: str
+    contentType: str
+
+class MultipartUrlsRequest(BaseModel):
+    key: str
+    uploadId: str
+    partCount: int
+
+class PartData(BaseModel):
+    PartNumber: int
+    ETag: str
+
+class MultipartCompleteRequest(BaseModel):
+    key: str
+    uploadId: str
+    parts: List[PartData]
+
+class MultipartAbortRequest(BaseModel):
+    key: str
+    uploadId: str
+
+@router.post("/multipart/initiate")
+async def initiate_multipart(
+    req: MultipartInitiateRequest,
+    current_user: Dict = Depends(get_current_user)
+):
+    clean_key = sanitize_key(req.key)
+    # The key should start with public/ or private/users/{uid}/ etc., we can assume the client got it from get_upload_url
+    upload_id = r2_service.initiate_multipart_upload(clean_key, req.contentType)
+    if not upload_id:
+        raise HTTPException(status_code=500, detail="Failed to initiate multipart upload")
+    return {"uploadId": upload_id}
+
+@router.post("/multipart/urls")
+async def get_multipart_urls(
+    req: MultipartUrlsRequest,
+    current_user: Dict = Depends(get_current_user)
+):
+    clean_key = sanitize_key(req.key)
+    if req.partCount < 1 or req.partCount > 1000:
+        raise HTTPException(status_code=400, detail="partCount must be between 1 and 1000")
+        
+    urls = []
+    for i in range(req.partCount):
+        url = r2_service.generate_presigned_part_url(clean_key, req.uploadId, i + 1)
+        urls.append(url)
+    return {"urls": urls}
+
+@router.post("/multipart/complete")
+async def complete_multipart(
+    req: MultipartCompleteRequest,
+    current_user: Dict = Depends(get_current_user)
+):
+    clean_key = sanitize_key(req.key)
+    parts = [{"PartNumber": p.PartNumber, "ETag": p.ETag} for p in req.parts]
+    success = r2_service.complete_multipart_upload(clean_key, req.uploadId, parts)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to complete multipart upload")
+    return {"success": True}
+
+@router.post("/multipart/abort")
+async def abort_multipart(
+    req: MultipartAbortRequest,
+    current_user: Dict = Depends(get_current_user)
+):
+    clean_key = sanitize_key(req.key)
+    success = r2_service.abort_multipart_upload(clean_key, req.uploadId)
+    return {"success": success}
+

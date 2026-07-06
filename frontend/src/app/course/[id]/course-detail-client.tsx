@@ -46,7 +46,7 @@ import { resolveMediaUrl, resolveAvatarUrl } from '@/lib/media-url';
 import { apiFetch } from '@/lib/api-client';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { enrollFreeCourse } from '@/app/actions/payments';
+
 import { submitReview } from '@/app/actions/reviews';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -195,10 +195,10 @@ export default function CourseDetailClient({
         } else if (course.isFree) {
             setIsEnrolling(true);
             try {
-                const idToken = await user.getIdToken();
-                const result = await enrollFreeCourse(idToken, course.id);
-                if (!result.success) {
-                    throw new Error(result.message || 'Enrollment failed.');
+                const res = await apiFetch(`/courses/${course.id}/enroll`, { method: 'POST' });
+                const result = await res.json();
+                if (!res.ok || !result.success) {
+                    throw new Error(result.error || result.detail || 'Enrollment failed.');
                 }
                 toast({ title: 'Enrolled successfully!', description: `You now have access to ${course.title}.` });
                 router.push(`/student-dashboard/learn/${course.id}`);

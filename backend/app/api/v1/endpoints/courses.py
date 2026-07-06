@@ -76,3 +76,50 @@ async def get_enrolled_courses(
             courses.append(_course_to_dict(c))
 
     return {"courses": courses}
+
+@router.post("/{course_id}/enroll")
+async def enroll_free_course(
+    course_id: str,
+    current_user: Dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Enroll the current user in a free course."""
+    # Check if course is free
+    result = await db.execute(select(Course).where(Course.id == course_id))
+    course = result.scalar_one_or_none()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    
+    if not course.isFree:
+        raise HTTPException(status_code=400, detail="This course is not free")
+
+    if course.status.lower() != "published":
+        raise HTTPException(status_code=400, detail="Course is not available")
+
+    # Get user
+    user_result = await db.execute(select(User).where(User.id == current_user["id"]))
+    user = user_result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    enrollments = user.enrollments or {}
+    if isinstance(enrollments, list):
+        enrollments = {}
+        
+    if course_id in enrollments:
+        return {"success": True, "message": "Already enrolled"}
+
+    enrollments[course_id] = {
+        "courseId": course_id,
+        "enrolledDate": datetime.utcnow().isoformat(),
+        "source": "self_enroll_free",
+        "progress": 0,
+        "completedLessons": []
+    }
+    
+    user.enrollments = enrollments
+    from sqlalchemy.orm.attributes import flag_modified
+    flag_modified(user, "enrollments")
+    await db.flush()
+    
+    return {"success": True, "message": "Successfully enrolled"}

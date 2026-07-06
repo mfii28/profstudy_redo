@@ -19,7 +19,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getCourses, saveCourse, deleteCourse, assignCourseToTutor } from '@/lib/course-data';
-import { createClassroom } from '@/app/actions/classroom';
+import { apiFetch } from '@/lib/api-client';
 import { type Course, type CourseStatus, type User } from '@/lib/db';
 import { getUserById, getUsers } from '@/lib/user-data';
 import { hasPermission } from '@/lib/rbac-data';
@@ -65,7 +65,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { deleteCourseAssetsByCourseId, previewCourseAssetPurge } from '@/app/actions/storage';
-import { sendTransactionalEmail } from '@/app/actions/email';
+import { sendTransactionalEmail } from '@/lib/email-api';
 
 const getStatusVariant = (status?: string): 'default' | 'secondary' | 'destructive' | 'outline' => {
     switch (status) {
@@ -197,15 +197,13 @@ export default function AdminCoursesPage() {
                 ...pricingFields,
             };
 
-            try {
+                try {
                 await saveCourse(updatedCourse);
                 if (status === 'Published') {
-                    const idToken = await adminUser.getIdToken();
-                    const classroomResult = await createClassroom(idToken, courseId).catch((error) => ({
-                        error: error instanceof Error ? error.message : String(error),
-                    }));
-                    if (classroomResult?.error) {
-                        console.error('Classroom setup failed for courseId:', courseId, 'error:', classroomResult.error);
+                    const res = await apiFetch(`/classrooms/${courseId}/create`, { method: 'POST' });
+                    if (!res.ok) {
+                        const errorData = await res.json().catch(() => ({}));
+                        console.error('Classroom setup failed for courseId:', courseId, 'error:', errorData);
                         toast({
                             variant: 'destructive',
                             title: 'Classroom setup failed',

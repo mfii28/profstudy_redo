@@ -1,10 +1,9 @@
 'use server';
 
-import prisma from '@/lib/prisma';
-import { createClient } from '@/lib/supabase-server';
 import { z } from 'zod';
 import { logger } from '@/lib/logging';
 import type { TestimonialGroup } from '@/lib/db';
+import { apiFetchServer } from '@/lib/api-client.server';
 
 const submitSchema = z.object({
   name: z.string().min(2).max(120),
@@ -28,26 +27,26 @@ export async function submitUserTestimonial(
       return { error: 'Please fill in all fields. Your story should be at least 20 characters.' };
     }
 
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return { error: 'Authentication required' };
-    }
-
-    await prisma.testimonial.create({
-      data: {
-        name: parsed.data.name,
-        role: parsed.data.role,
-        text: parsed.data.text,
-        avatar: '',
-        status: 'pending',
-        group: parsed.data.group ?? 'general',
+    const res = await apiFetchServer('/testimonials/', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...parsed.data,
         source: 'user',
-        submittedBy: user.id,
-      },
+        status: 'pending',
+      }),
+      // We pass the idToken just in case the backend requires explicit verification, 
+      // but apiFetchServer also passes the __session cookie automatically.
+      headers: {
+        'Authorization': `Bearer ${idToken}`,
+      }
     });
 
-    logger.info('[Testimonials] User submission received', { uid: user.id });
+    if (!res.ok) {
+      const errBody = await res.text();
+      throw new Error(`Backend error: ${res.status} ${errBody}`);
+    }
+
+    logger.info('[Testimonials] User submission received');
     return { success: true as const };
   } catch (error: unknown) {
     const err = error as { code?: string; message?: string };
@@ -55,3 +54,4 @@ export async function submitUserTestimonial(
     return { error: 'Could not submit your testimonial. Please try again.' };
   }
 }
+

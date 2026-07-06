@@ -33,6 +33,12 @@ from app.api.v1.endpoints.tutor import router as tutor_router
 from app.api.v1.endpoints.session import router as session_router
 from app.api.v1.endpoints.analytics import router as analytics_router
 from app.api.v1.endpoints.achievements import router as achievements_router
+from app.api.v1.endpoints.communications import router as communications_router
+from app.api.v1.endpoints.blog import router as blog_router
+from app.api.v1.endpoints.testimonials import router as testimonials_router
+from app.api.v1.endpoints.admin_finance import router as admin_finance_router
+from app.api.v1.endpoints.admin_security import router as admin_security_router
+from app.api.v1.endpoints.ai_generation import router as ai_generation_router
 
 api_v1_router.include_router(storage_router, prefix="/storage", tags=["storage"])
 api_v1_router.include_router(payments_router, prefix="/payments", tags=["payments"])
@@ -57,3 +63,9 @@ api_v1_router.include_router(tutor_router, prefix="/tutor", tags=["tutor"])
 api_v1_router.include_router(session_router, prefix="/session", tags=["session"])
 api_v1_router.include_router(analytics_router, prefix="/analytics", tags=["analytics"])
 api_v1_router.include_router(achievements_router, prefix="/achievements", tags=["achievements"])
+api_v1_router.include_router(communications_router, prefix="/communications", tags=["communications"])
+api_v1_router.include_router(blog_router, prefix="/blog", tags=["blog"])
+api_v1_router.include_router(testimonials_router, prefix="/testimonials", tags=["testimonials"])
+api_v1_router.include_router(admin_finance_router, prefix="/admin/finance", tags=["admin-finance"])
+api_v1_router.include_router(admin_security_router, prefix="/admin/security", tags=["admin-security"])
+api_v1_router.include_router(ai_generation_router, prefix="/ai", tags=["ai"])

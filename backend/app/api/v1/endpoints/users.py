@@ -128,6 +128,67 @@ async def bootstrap_profile(
     return {"isNew": True, "user": _user_to_dict(new_user)}
 
 
+# ─── POST /users/register ──────────────────────────────────────────────
+
+@router.post("/register")
+async def register_user(
+    data: Dict,
+    current_user: Dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Register a new user from the signup flow."""
+    uid = current_user["id"]
+    email = current_user.get("email", "")
+    name = data.get("name", "").strip()
+    role = data.get("role", "student")
+    if role not in ["student", "tutor"]:
+        role = "student"
+
+    # Check if user already exists
+    result = await db.execute(select(User).where(User.id == uid))
+    existing = result.scalar_one_or_none()
+    if existing:
+        return {"success": True, "user": _user_to_dict(existing)}
+
+    now = datetime.utcnow()
+    new_user = User(
+        id=uid,
+        email=email,
+        name=name,
+        role=role,
+        status="active",
+        phone_number=data.get("phone_number", ""),
+        student_registration_number=data.get("student_registration_number"),
+        affiliate_link=data.get("affiliate_link"),
+        referredBy=data.get("referredBy"),
+        isPremium=False,
+        tutorApproved=False,
+        studyStreak=0,
+        emailVerified=False,
+        createdAt=now,
+        updatedAt=now,
+        aiUsage={
+            "tokensRemaining": 100 if role == "tutor" else 50,
+            "lastResetDate": now.isoformat(),
+        },
+        enrollments=[],
+        wishlistCourseIds=[],
+    )
+    db.add(new_user)
+    await db.flush()
+    
+    # Set custom claims via Firebase Admin
+    try:
+        import firebase_admin.auth as auth_admin
+        auth_admin.set_custom_user_claims(uid, {"role": role})
+    except Exception as e:
+        print(f"Warning: Failed to set custom claims: {e}")
+
+    # (Welcome email could be sent here or triggered via Eventarc)
+
+    return {"success": True, "user": _user_to_dict(new_user)}
+
+
 # ─── PUT /users/role ───────────────────────────────────────────────────
 
 @router.put("/role")

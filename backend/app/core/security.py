@@ -47,154 +47,77 @@ def rate_limit(max_requests: int = 60, window_seconds: int = 60):
         return True
     
     return _rate_limit
-SUPABASE_JWKS_URL = f"{settings.SUPABASE_URL}/.well-known/jwks.json" if settings.SUPABASE_URL else None
+import firebase_admin
+from firebase_admin import credentials, auth
+from app.core.config import settings
 
-
-async def _fetch_jwks() -> list:
-    """Fetch and cache Supabase JWKS keys."""
-    if not SUPABASE_JWKS_URL:
-        return []
-    try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(SUPABASE_JWKS_URL, timeout=5)
-            if resp.status_code != 200:
-                return []
-            return resp.json().get("keys", [])
-    except Exception:
-        return []
-
-
-def _rsa_key_from_jwk(key_data: dict) -> Optional[dict]:
-    """Convert a JWK dict to an RSA key dict usable by python-jose."""
-    try:
-        return jwk.construct(key_data)
-    except Exception:
-        return None
-
-
-async def _verify_supabase_token(token: str) -> Optional[Dict]:
-    """Verify a Supabase JWT using the Supabase JWKS endpoint."""
-    if not SUPABASE_JWKS_URL:
-        return None
-
-    try:
-        # Get header to find key ID
-        headers = jwt.get_unverified_headers(token)
-        kid = headers.get("kid")
-
-        # Fetch fresh JWKS
-        jwks_keys = await _fetch_jwks()
-        if not jwks_keys:
-            return None
-
-        # Find matching key
-        key_data = None
-        for key in jwks_keys:
-            if key.get("kid") == kid:
-                key_data = key
-                break
-
-        if not key_data:
-            return None
-
-        # Construct RSA key
-        rsa_key = _rsa_key_from_jwk(key_data)
-        if not rsa_key:
-            return None
-
-        # Verify and decode
-        payload = jwt.decode(
-            token,
-            rsa_key,
-            algorithms=["RS256"],
-            options={"verify_aud": False},
-        )
-
-        return {
-            "id": payload.get("sub"),
-            "email": payload.get("email", ""),
-            "role": payload.get("user_metadata", {}).get("role") or payload.get("role", "student"),
-        }
-    except Exception:
-        return None
+# Initialize Firebase Admin
+if not firebase_admin._apps:
+    if settings.FIREBASE_ADMIN_CREDENTIALS:
+        try:
+            import json
+            cred_dict = json.loads(settings.FIREBASE_ADMIN_CREDENTIALS)
+            cred = credentials.Certificate(cred_dict)
+            firebase_admin.initialize_app(cred)
+        except Exception as e:
+            print(f"Failed to initialize Firebase Admin with credentials string: {e}")
+            firebase_admin.initialize_app()
+    else:
+        # Fallback to default credentials (e.g., GOOGLE_APPLICATION_CREDENTIALS env var)
+        try:
+            firebase_admin.initialize_app()
+        except ValueError:
+            pass # Already initialized or missing credentials (dev mode)
 
 
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security_scheme)) -> Dict:
     """
-    Decodes and verifies a JWT.
-    Priority:
-      1. Backend-signed JWT (HS256 with JWT_SECRET_KEY)
-      2. Supabase JWT (RS256 via JWKS)
-      3. Unverified decode (DEV ONLY / fallback)
-      4. Dev mock user (when no secrets configured)
+    Decodes and verifies a Firebase JWT.
     """
     token = credentials.credentials
-    is_dev = settings.JWT_SECRET_KEY is None and settings.SUPABASE_URL is None
+    is_dev = not settings.FIREBASE_ADMIN_CREDENTIALS
 
-    # ── Dev bypass ──────────────────────────────────────────
-    if is_dev:
+    if is_dev and token == "mock-dev-token":
         return {"id": "dev-user-id", "email": "dev@studymate.com", "role": "admin"}
 
-    # ── Try 1: Backend-signed JWT ───────────────────────────
-    if settings.JWT_SECRET_KEY:
-        try:
-            payload = jwt.decode(
-                token,
-                settings.JWT_SECRET_KEY,
-                algorithms=[settings.JWT_ALGORITHM]
-            )
-            user_id: Optional[str] = payload.get("sub")
-            email: Optional[str] = payload.get("email")
-            role: Optional[str] = payload.get("role", "student")
-            if user_id is not None:
-                return {"id": user_id, "email": email, "role": role}
-        except JWTError:
-            pass
-
-    # ── Try 2: Supabase JWT via JWKS ────────────────────────
-    # Since get_current_user is synchronous but _verify_supabase_token is async,
-    # we skip JWKS verification here and rely on unverified decode.
-    # The frontend and adminDb shim already verify tokens against Supabase.
-    # For production, make get_current_user async and await JWKS verification.
-    
-    # ── Try 3: Unverified decode (extracts user identity from JWT claims) ────
-    # NOTE: Supabase JWT has role="authenticated" at the top level (built-in claim).
-    # The REAL role is in user_metadata.role. We check user_metadata first.
     try:
-        payload = jwt.decode(token, None, options={"verify_signature": False})
-        sub = payload.get("sub")
-        if sub:
-            user_meta = payload.get("user_metadata", {}) or {}
-            role = user_meta.get("role") or payload.get("role", "student")
-            return {
-                "id": sub,
-                "email": payload.get("email", ""),
-                "role": role,
-            }
-    except JWTError:
-        pass
+        decoded_token = auth.verify_id_token(token)
+        return {
+            "id": decoded_token.get("uid"),
+            "email": decoded_token.get("email", ""),
+            "role": decoded_token.get("role", "student"),
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Could not validate credentials: {str(e)}"
+        )
 
-    # ── Try 4: Raw base64 JSON token (legacy / mock) ────────
+
+def get_current_user_optional(request: Request) -> Optional[Dict]:
+    """
+    Tries to decode and verify a Firebase JWT.
+    Returns None if no valid token is present.
+    """
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return None
+        
+    token = auth_header.split(" ")[1]
+    is_dev = not settings.FIREBASE_ADMIN_CREDENTIALS
+
+    if is_dev and token == "mock-dev-token":
+        return {"id": "dev-user-id", "email": "dev@studymate.com", "role": "admin"}
+
     try:
-        parts = token.split(".")
-        if len(parts) == 3:
-            padded = parts[1] + "=" * (4 - len(parts[1]) % 4)
-            decoded = json_lib.loads(base64url_decode(padded))
-            if decoded.get("sub") or decoded.get("uid"):
-                user_meta = decoded.get("user_metadata", {}) or {}
-                role = user_meta.get("role") or decoded.get("role", "student")
-                return {
-                    "id": decoded.get("sub") or decoded.get("uid"),
-                    "email": decoded.get("email", ""),
-                    "role": role,
-                }
+        decoded_token = auth.verify_id_token(token)
+        return {
+            "id": decoded_token.get("uid"),
+            "email": decoded_token.get("email", ""),
+            "role": decoded_token.get("role", "student"),
+        }
     except Exception:
-        pass
-
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials"
-    )
+        return None
 
 
 def require_role(allowed_roles: list[str]):

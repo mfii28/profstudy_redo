@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@/firebase';
 import { Loader2 } from 'lucide-react';
+import { getRoleDashboardPath } from '@/lib/auth-verification';
 
 export default function DashboardRedirectPage() {
   const router = useRouter();
@@ -16,14 +17,12 @@ export default function DashboardRedirectPage() {
         return;
       }
 
-      const role = user.role || 'student';
-      if (role === 'admin' || role === 'superadmin' || role === 'subadmin') {
-        router.replace('/admin');
-      } else if (role === 'tutor') {
-        router.replace('/tutor-dashboard');
-      } else {
+      user.getIdTokenResult().then((tokenResult) => {
+        const role = tokenResult.claims.role || 'student';
+        router.replace(getRoleDashboardPath(role as string));
+      }).catch(() => {
         router.replace('/student-dashboard');
-      }
+      });
     }
   }, [user, isLoading, router]);
 

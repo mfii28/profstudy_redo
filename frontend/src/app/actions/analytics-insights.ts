@@ -1,37 +1,31 @@
 'use server';
 
-import {
-  generateDashboardInsight,
-  generateCourseInsight,
-  type DashboardInsightData,
-  type CourseInsightData,
-} from '@/lib/ai-insights';
-import { adminAuth } from '@/firebase/admin';
+import { apiFetchServer } from '@/lib/api-client.server';
 import { logger } from '@/lib/logging';
 
-async function verifyAuthenticated(idToken: string): Promise<string | null> {
+export type DashboardInsightData = Record<string, any>;
+export type CourseInsightData = Record<string, any>;
+
+export async function generateDashboardInsightAction(data: DashboardInsightData, idToken?: string) {
   try {
-    const decoded = await adminAuth.verifyIdToken(idToken);
-    return decoded.uid;
-  } catch {
-    return null;
+    return await apiFetchServer('/api/v1/ai/insights/dashboard', {
+      method: 'POST',
+      body: JSON.stringify({ data }),
+    });
+  } catch (error: any) {
+    logger.error('[Analytics Insights] Failed to generate dashboard insight', { error: error.message });
+    return { insight: 'Failed to generate insight', tokensUsed: 0, premium: false };
   }
 }
 
-export async function generateDashboardInsightAction(data: DashboardInsightData, idToken: string) {
-  const uid = await verifyAuthenticated(idToken);
-  if (!uid) {
-    logger.warn('[Analytics Insights] Unauthorized dashboard insight request');
-    return { insight: 'Authentication required. Please sign in again.', tokensUsed: 0, premium: false };
+export async function generateCourseInsightAction(data: CourseInsightData, idToken?: string) {
+  try {
+    return await apiFetchServer('/api/v1/ai/insights/course', {
+      method: 'POST',
+      body: JSON.stringify({ data }),
+    });
+  } catch (error: any) {
+    logger.error('[Analytics Insights] Failed to generate course insight', { error: error.message });
+    return { insight: 'Failed to generate insight', tokensUsed: 0, premium: false };
   }
-  return generateDashboardInsight(data);
-}
-
-export async function generateCourseInsightAction(data: CourseInsightData, idToken: string) {
-  const uid = await verifyAuthenticated(idToken);
-  if (!uid) {
-    logger.warn('[Analytics Insights] Unauthorized course insight request');
-    return { insight: 'Authentication required. Please sign in again.', tokensUsed: 0, premium: false };
-  }
-  return generateCourseInsight(data);
 }

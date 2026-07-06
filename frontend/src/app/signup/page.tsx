@@ -8,8 +8,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Logo } from '@/components/logo';
 import { useToast } from '@/hooks/use-toast';
-import { registerUser, checkRegistrationNumberExistsAction } from '@/app/actions/user';
-import { supabase } from '@/lib/supabase-client';
+import { auth } from '@/firebase/client';
+import { createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, sendEmailVerification } from 'firebase/auth';
+import { apiFetch } from '@/lib/api-client';
 import { Eye, EyeOff, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { validatePassword, validateFullName } from '@/lib/password-validation';
 import {
@@ -201,9 +202,20 @@ export default function SignupPage() {
     if (!validation.isValid) {
       setRegistrationError(validation.error || 'Invalid registration number');
     } else {
-      // Check uniqueness using server action
-      const exists = await checkRegistrationNumberExistsAction(trimmed);
-      if (exists) {
+        // Use the FastAPI backend to check registration number
+        const regCheckRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/users/check-registration-number`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ registrationNumber: trimmed })
+        });
+        
+        let exists = false;
+        if (regCheckRes.ok) {
+          const regData = await regCheckRes.json();
+          exists = regData.exists;
+        }
+
+        if (exists) {
         setRegistrationError('This registration number is already registered');
       } else {
         setRegistrationError('');
@@ -276,44 +288,29 @@ export default function SignupPage() {
 
       const role = isTutorSignup ? 'tutor' : 'student';
 
-      // 1. Sign up the user via Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: email.toLowerCase().trim(),
-        password,
-        options: {
-          data: {
-            name: fullName,
-            role: role,
-          },
-        },
+      // 1. Sign up the user via Firebase Auth
+      const userCredential = await createUserWithEmailAndPassword(auth, email.toLowerCase().trim(), password);
+      const user = userCredential.user;
+
+      // Send verification email
+      await sendEmailVerification(user);
+
+      // 2. Create the user profile in the database via API
+      const signupRes = await apiFetch('/users/register', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: fullName,
+          role: role,
+          phone_number: phoneCheck.normalized || phoneNumber,
+          student_registration_number: regNormalized,
+          affiliate_link: affiliateLink && affCheck.isValid ? (affCheck.sanitized || affiliateLink) : undefined,
+          referredBy: referralCode || undefined,
+        })
       });
 
-      if (authError) {
-        toast({ variant: 'destructive', title: 'Signup Failed', description: authError.message });
-        setIsLoading(false);
-        return;
-      }
-
-      if (!authData.user) {
-        toast({ variant: 'destructive', title: 'Signup Failed', description: 'No user data returned from authentication service.' });
-        setIsLoading(false);
-        return;
-      }
-
-      // 2. Create the user profile in the database via server action
-      const signupRes = await registerUser({
-        id: authData.user.id,
-        name: fullName,
-        email: email.toLowerCase().trim(),
-        role: role,
-        phone_number: phoneCheck.normalized || phoneNumber,
-        student_registration_number: regNormalized,
-        affiliate_link: affiliateLink && affCheck.isValid ? (affCheck.sanitized || affiliateLink) : undefined,
-        referredBy: referralCode || undefined,
-      });
-
-      if (signupRes.error) {
-        toast({ variant: 'destructive', title: 'Signup Failed', description: signupRes.error });
+      const signupData = await signupRes.json();
+      if (!signupRes.ok || !signupData.success) {
+        toast({ variant: 'destructive', title: 'Signup Failed', description: signupData.error || 'Failed to create profile' });
         setIsLoading(false);
         return;
       }
@@ -324,18 +321,20 @@ export default function SignupPage() {
         sessionStorage.removeItem('signup_intent');
       }
 
+      // Refresh ID token to get new claims
+      await user.getIdToken(true);
+
       // Set session cookie for local compatibility layers
       const secure = window.location.protocol === 'https:' ? 'Secure;' : '';
-      const emailVerified = !!authData.user.email_confirmed_at;
-      const mockSessionToken = btoa(JSON.stringify({ uid: authData.user.id, role: role, emailVerified }));
-      document.cookie = `__session=${mockSessionToken}; path=/; max-age=3600; SameSite=Lax; ${secure}`;
+      const sessionToken = await user.getIdToken(true);
+      document.cookie = `__session=${sessionToken}; path=/; max-age=3600; SameSite=Lax; ${secure}`;
 
       toast({
         title: 'Account Created',
-        description: 'A 6-digit verification code has been sent to your inbox.',
+        description: 'A verification link has been sent to your inbox.',
       });
 
-      router.replace(`/verify-email?uid=${authData.user.id}`);
+      router.replace(`/verify-email?uid=${user.uid}`);
     } catch (error: any) {
       toast({ variant: 'destructive', title: 'Signup Failed', description: error.message || 'An unexpected error occurred.' });
       setIsLoading(false);
@@ -345,13 +344,9 @@ export default function SignupPage() {
   const handleGoogleSignup = async () => {
     setIsLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}/dashboard`,
-        },
-      });
-      if (error) throw error;
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+      router.replace('/dashboard');
     } catch (error: any) {
       toast({ variant: 'destructive', title: 'Google Signup Failed', description: error.message });
       setIsLoading(false);

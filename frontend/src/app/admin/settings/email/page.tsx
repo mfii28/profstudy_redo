@@ -33,7 +33,7 @@ import {
   type EmailTemplates,
 } from '@/lib/email-template-data';
 import { logAdminAction } from '@/lib/audit-data';
-import { getEmailProviderStatus, sendTestEmail } from '@/app/actions/email';
+import { getEmailProviderStatus, sendTestEmail } from '@/lib/email-api';
 
 type HealthStatus = {
   configured: boolean;

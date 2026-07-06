@@ -69,3 +69,54 @@ async def get_tutor_students(
         "hasMore": has_more,
         "nextCursor": enrolled_students[page_size - 1]["id"] if len(enrolled_students) >= page_size else None,
     }
+
+from pydantic import BaseModel
+
+class SavePayoutDetailsRequest(BaseModel):
+    payoutMethod: str
+    bankName: Optional[str] = None
+    bankAccountName: Optional[str] = None
+    accountNumber: Optional[str] = None
+    momoNetwork: Optional[str] = None
+    payoutPhoneNumber: Optional[str] = None
+
+@router.patch("/payout-details")
+async def save_payout_details(
+    req: SavePayoutDetailsRequest,
+    current_user: Dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    uid = current_user["id"]
+    result = await db.execute(select(User).where(User.id == uid))
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    if user.role not in ["tutor", "admin", "superadmin", "subadmin"]:
+        raise HTTPException(status_code=403, detail="Only tutors can update payout details")
+
+    tutor_details = dict(user.tutorDetails) if user.tutorDetails else {}
+    
+    tutor_details['payoutMethod'] = req.payoutMethod
+    if req.payoutMethod == 'bank':
+        tutor_details['bankName'] = req.bankName.strip() if req.bankName else None
+        tutor_details['bankAccountName'] = req.bankAccountName.strip() if req.bankAccountName else None
+        tutor_details['accountNumber'] = req.accountNumber.strip() if req.accountNumber else None
+        tutor_details['momoNetwork'] = None
+        tutor_details['payoutPhoneNumber'] = None
+        tutor_details['momoNumber'] = None
+    else:
+        tutor_details['momoNetwork'] = req.momoNetwork
+        tutor_details['payoutPhoneNumber'] = req.payoutPhoneNumber.strip() if req.payoutPhoneNumber else None
+        tutor_details['momoNumber'] = req.payoutPhoneNumber.strip() if req.payoutPhoneNumber else None
+        tutor_details['bankName'] = None
+        tutor_details['bankAccountName'] = None
+        tutor_details['accountNumber'] = None
+
+    user.tutorDetails = tutor_details
+    db.add(user)
+    await db.commit()
+    
+    return {"success": True}
+

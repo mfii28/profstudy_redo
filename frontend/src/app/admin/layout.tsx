@@ -38,7 +38,7 @@ import { NotificationDropdown } from '@/components/notification-dropdown';
 import { useUser } from '@/firebase';
 import { getPresignedDownloadUrl, getPresignedUploadUrl } from '@/app/actions/storage';
 import { markAsRead, subscribeToNotifications } from '@/lib/notifications-data';
-import { syncAdminSessionClaims, getUserProfileAction, updateUserProfileAction } from '@/app/actions/user';
+import { apiFetch } from '@/lib/api-client';
 import { useToast } from '@/hooks/use-toast';
 import type { Notification } from '@/lib/db';
 
@@ -77,16 +77,17 @@ export default function AdminDashboardLayout({
         }
 
         try {
-          const res = await getUserProfileAction();
-          if (res.success && res.user) {
-            const profile = res.user;
+          const res = await apiFetch('/profile');
+          const data = await res.json();
+          
+          if (res.ok && data.success && data.user) {
+            const profile = data.user;
             const role = String(profile.role || '').trim().toLowerCase();
             if (role === 'admin' || role === 'superadmin' || role === 'subadmin') {
               setAdminProfile(profile);
 
               try {
-                const idToken = await currentUser.getIdToken();
-                await syncAdminSessionClaims(idToken);
+                await apiFetch('/sync-claims', { method: 'PUT' });
                 await currentUser.getIdToken(true);
               } catch (syncError) {
                 console.warn('[Admin] Failed to sync role claims:', syncError);
@@ -187,9 +188,13 @@ export default function AdminDashboardLayout({
         return;
       }
 
-      const updateRes = await updateUserProfileAction({ avatar: key });
-      if (updateRes.error) {
-        toast({ variant: 'destructive', title: 'Upload failed', description: updateRes.error });
+      const updateRes = await apiFetch('/profile', {
+        method: 'PUT',
+        body: JSON.stringify({ avatar: key })
+      });
+      const updateData = await updateRes.json();
+      if (!updateRes.ok || !updateData.success) {
+        toast({ variant: 'destructive', title: 'Upload failed', description: updateData.error || 'Failed to update profile avatar' });
         return;
       }
       setAdminProfile((prev: any) => ({ ...prev, avatar: key }));

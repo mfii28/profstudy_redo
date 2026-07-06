@@ -16,7 +16,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Logo } from '@/components/logo';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/lib/supabase-client';
+import { auth } from '@/firebase/client';
+import { signInWithEmailAndPassword, sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { Loader2, Eye, EyeOff } from 'lucide-react';
 import { getRoleDashboardPath } from '@/lib/auth-verification';
 
@@ -36,37 +37,22 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.toLowerCase().trim(),
-        password,
-      });
+      const userCredential = await signInWithEmailAndPassword(auth, email.toLowerCase().trim(), password);
+      const user = userCredential.user;
 
-      if (error) {
-        toast({
-          variant: 'destructive',
-          title: 'Login Failed',
-          description: error.message || 'Invalid email or password.',
-        });
-        setIsLoading(false);
-        return;
-      }
+      const idTokenResult = await user.getIdTokenResult();
+      const role = idTokenResult.claims.role || 'student';
 
-      const user = data.user;
-      if (!user) throw new Error('No user data returned.');
-
-      const role = user.user_metadata?.role || 'student';
-
-      // Set cookie for compatibility
+      // Set cookie for FastAPI proxy compatibility
       const secure = window.location.protocol === 'https:' ? 'Secure;' : '';
-      const emailVerified = !!user.email_confirmed_at;
-      const mockSessionToken = btoa(JSON.stringify({ uid: user.id, role, emailVerified }));
-      document.cookie = `__session=${mockSessionToken}; path=/; max-age=3600; SameSite=Lax; ${secure}`;
+      const sessionToken = await user.getIdToken(true);
+      document.cookie = `__session=${sessionToken}; path=/; max-age=3600; SameSite=Lax; ${secure}`;
 
       toast({
         title: 'Login Successful',
         description: 'Redirecting to your dashboard...',
       });
-      router.replace(getRoleDashboardPath(role));
+      router.replace(getRoleDashboardPath(role as string));
     } catch (error: any) {
       toast({
         variant: 'destructive',
@@ -80,13 +66,10 @@ export default function LoginPage() {
   const handleGoogleLogin = async () => {
     setIsLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}/dashboard`,
-        },
-      });
-      if (error) throw error;
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+      // Let the onAuthStateChanged in provider.tsx handle the redirect, or we can push manually
+      router.replace('/dashboard'); // Generic dashboard route that redirects to the role specific dashboard
     } catch (error: any) {
       toast({ variant: 'destructive', title: 'Google Login Failed', description: error.message });
       setIsLoading(false);
@@ -104,10 +87,7 @@ export default function LoginPage() {
     }
     setIsResetting(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail.toLowerCase().trim(), {
-        redirectTo: `${window.location.origin}/reset-password`,
-      });
-      if (error) throw error;
+      await sendPasswordResetEmail(auth, resetEmail.toLowerCase().trim());
       toast({
         title: 'Success',
         description: 'Password reset link has been sent to your email.',
@@ -287,9 +267,4 @@ export default function LoginPage() {
   );
 }
 
-function tokenPlaceholder(session: any) {
-  // Signs a mock payload using a simplified scheme for client compatibility
-  if (!session?.user) return '';
-  const payload = { uid: session.user.id, role: session.user.role };
-  return Buffer.from(JSON.stringify(payload)).toString('base64');
-}
+

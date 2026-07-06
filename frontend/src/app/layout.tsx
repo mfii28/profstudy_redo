@@ -26,7 +26,7 @@ import { ThemeProvider } from '@/components/theme-provider';
 import { CartProvider } from '@/lib/cart-context';
 import { CustomerSupportButton } from '@/components/customer-support-button';
 import { CartSheet } from '@/components/cart/cart-sheet';
-import { SupabaseClientProvider } from '@/firebase';
+import { FirebaseClientProvider } from '@/firebase';
 import { PwaInstallPrompt, PwaNetworkStatus } from '@/components/pwa';
 
 export const viewport: Viewport = {
@@ -110,7 +110,7 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <SupabaseClientProvider>
+          <FirebaseClientProvider>
             <CartProvider>
               {children}
               <CartSheet />
@@ -119,7 +119,7 @@ export default function RootLayout({
               <PwaNetworkStatus />
               <Toaster />
             </CartProvider>
-          </SupabaseClientProvider>
+          </FirebaseClientProvider>
         </ThemeProvider>
       </body>
     </html>

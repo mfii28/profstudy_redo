@@ -14,7 +14,7 @@ import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { useStudentProfile } from '@/hooks/use-student-profile';
 import { getBookById, hasUserPurchasedBook } from '@/lib/book-data';
-import { purchaseBook, claimFreeBook } from '@/app/actions/books';
+import { apiFetch } from '@/lib/api-client';
 import type { Book, UserAddress } from '@/lib/db';
 import { resolveMediaUrl } from '@/lib/media-url';
 import {
@@ -76,49 +76,51 @@ export default function BookDetailPage({ params }: BookDetailPageProps) {
   const handlePurchase = async () => {
     if (!currentUser || !book) return;
 
-    // Free digital book — claim directly, no payment flow
-    if (Boolean(book.isFree) || Number(book.price ?? 0) <= 0) {
+      // Free digital book — claim directly, no payment flow
+      if (Boolean(book.isFree) || Number(book.price ?? 0) <= 0) {
+        setIsPurchasing(true);
+        try {
+          const res = await apiFetch(`/books/${bookId}/claim-free`, {
+            method: 'POST'
+          });
+          const result = await res.json();
+          
+          if (!res.ok || result.error) {
+            toast({ variant: 'destructive', title: 'Could not claim book', description: result.error || 'Request failed' });
+          } else {
+            setIsOwned(true);
+            toast({ title: 'Book added to your library!' });
+          }
+        } catch {
+          toast({ variant: 'destructive', title: 'An error occurred. Please try again.' });
+        } finally {
+          setIsPurchasing(false);
+        }
+        return;
+      }
+  
+      if (book.type === 'physical' && !showShipping) {
+        setShowShipping(true);
+        return;
+      }
       setIsPurchasing(true);
       try {
-        const idToken = await currentUser.getIdToken(true);
-        const result = await claimFreeBook(bookId, idToken);
-        if (result.error) {
-          toast({ variant: 'destructive', title: 'Could not claim book', description: result.error });
-        } else {
-          setIsOwned(true);
-          toast({ title: 'Book added to your library!' });
+        const res = await apiFetch(`/books/${bookId}/purchase`, {
+          method: 'POST',
+          body: JSON.stringify({ shippingAddress: book.type === 'physical' ? shipping : undefined })
+        });
+        const result = await res.json();
+        
+        if (!res.ok || result.error) {
+          toast({ variant: 'destructive', title: 'Purchase Failed', description: result.error || 'Request failed' });
+        } else if (result.authorization_url) {
+          window.location.href = result.authorization_url;
         }
       } catch {
         toast({ variant: 'destructive', title: 'An error occurred. Please try again.' });
       } finally {
         setIsPurchasing(false);
       }
-      return;
-    }
-
-    if (book.type === 'physical' && !showShipping) {
-      setShowShipping(true);
-      return;
-    }
-    setIsPurchasing(true);
-    try {
-      const idToken = await currentUser.getIdToken(true);
-      const result = await purchaseBook(
-        bookId,
-        idToken,
-        currentUser.email ?? '',
-        book.type === 'physical' ? shipping : undefined
-      );
-      if (result.error) {
-        toast({ variant: 'destructive', title: 'Purchase Failed', description: result.error });
-      } else if (result.authorization_url) {
-        window.location.href = result.authorization_url;
-      }
-    } catch {
-      toast({ variant: 'destructive', title: 'An error occurred. Please try again.' });
-    } finally {
-      setIsPurchasing(false);
-    }
   };
 
   if (isLoading) {

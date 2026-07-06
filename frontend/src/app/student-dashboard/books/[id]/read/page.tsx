@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useStudentProfile } from '@/hooks/use-student-profile';
 import { getBookById } from '@/lib/book-data';
-import { createBookReaderSession } from '@/app/actions/books';
+import { apiFetch } from '@/lib/api-client';
 import { PdfViewer } from '@/components/pdf-viewer';
 import { ArrowLeft, BookOpen, Lock } from 'lucide-react';
 import { ProtectedMediaShell } from '@/components/protected-media-shell';
@@ -38,8 +38,8 @@ export default function ReadBookPage({ params }: ReadPageProps) {
         const [book, sessionResult] = await Promise.all([
           getBookById(bookId),
           (async () => {
-            const idToken = await currentUser.getIdToken(true);
-            return createBookReaderSession(bookId, idToken);
+            const res = await apiFetch(`/books/${bookId}/create-reader-session`, { method: 'POST' });
+            return await res.json();
           })(),
         ]);
 

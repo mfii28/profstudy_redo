@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { useCart } from '@/lib/cart-context';
 import { useUser } from '@/firebase';
-import { initiateCartCheckout } from '@/app/actions/checkout';
+
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, ShieldCheck, MapPin } from 'lucide-react';
 import { type User as AppUser, type UserAddress } from '@/lib/db';
@@ -94,11 +94,20 @@ export default function CheckoutPage() {
 
     setIsProcessing(true);
     try {
-      const idToken = await user.getIdToken();
-        const result = await initiateCartCheckout(idToken, email, finalTotal, cartItems, hasPhysicalProducts ? address : null, checkoutSessionId);
+      const res = await apiFetch('/payments/checkout', {
+        method: 'POST',
+        body: JSON.stringify({
+          email,
+          items: cartItems,
+          address: hasPhysicalProducts ? address : null,
+          checkoutSessionId
+        })
+      });
 
-      if (result.error) {
-        toast({ variant: 'destructive', title: 'Checkout Error', description: result.error });
+      const result = await res.json();
+
+      if (!res.ok || result.error) {
+        toast({ variant: 'destructive', title: 'Checkout Error', description: result.error || result.detail || 'Checkout failed.' });
         return;
       }
 
@@ -108,6 +117,8 @@ export default function CheckoutPage() {
       }
 
       toast({ variant: 'destructive', title: 'Checkout Error', description: 'Could not start payment. Please try again.' });
+    } catch (e: any) {
+      toast({ variant: 'destructive', title: 'Checkout Error', description: 'A network error occurred.' });
     } finally {
       setIsProcessing(false);
     }

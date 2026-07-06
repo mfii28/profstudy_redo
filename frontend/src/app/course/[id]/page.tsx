@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
-import { adminDb } from '@/firebase/admin';
+import { apiFetchServer } from '@/lib/api-client.server';
 import { canReadCoursePublicly } from '../../../lib/course-access';
-import { type Course } from '@/lib/db';
+import type { Course } from '@/lib/db';
 import CourseDetailClient from './course-detail-client';
 import { createElement } from 'react';
 
@@ -9,33 +9,26 @@ interface CoursePageProps {
   params: Promise<{ id: string }>;
 }
 
-/** `notFound()` from next/navigation throws with this digest shape — must rethrow, not swallow. */
-function isNextNavigationNotFound(error: unknown): boolean {
-  const digest =
-    typeof error === 'object' && error !== null && 'digest' in error
-      ? String((error as { digest?: string }).digest)
-      : '';
-  return digest.includes('NEXT_HTTP_ERROR_FALLBACK') && digest.includes('404');
-}
-
 export default async function CourseDetailPage({ params }: CoursePageProps) {
   const { id } = await params;
 
   try {
-    const snap = await adminDb.collection('courses').doc(id).get();
-    if (!snap.exists) {
-      notFound();
+    const res = await apiFetchServer(`/courses/${id}`);
+    if (!res.ok) {
+      if (res.status === 404) notFound();
+      throw new Error(`Failed to fetch course: ${res.statusText}`);
     }
-
-    const course = snap.data() as Course;
+    const data = await res.json();
+    const course = data.course as Course;
+    
     if (!canReadCoursePublicly(course.status)) {
       notFound();
     }
   } catch (error: unknown) {
-    if (isNextNavigationNotFound(error)) {
+    if (error instanceof Error && error.message.includes('NEXT_HTTP_ERROR_FALLBACK')) {
       throw error;
     }
-    // Admin unavailable, Firestore errors, timeouts, etc. — still render; client loads via rules.
+    // Backend unavailable, timeouts, etc. — still render; client loads via rules.
     console.warn('[CourseDetailPage] Server-side course gate failed; falling back to client.', error);
   }
 

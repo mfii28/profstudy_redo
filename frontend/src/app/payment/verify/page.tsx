@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { verifyTransaction } from '@/app/actions/payments';
+import { apiFetch } from '@/lib/api-client';
 import { useUser } from '@/firebase';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -37,19 +37,22 @@ function VerifyPaymentContent() {
     try {
       setVerificationStep(1);
       setMessage('Verifying your payment with provider...');
-      const idToken = await user.getIdToken();
-      let result = await verifyTransaction(reference, undefined, idToken);
+      let res = await apiFetch(`/payments/verify?reference=${reference}`, { method: 'GET' });
+      let result = await res.json();
+      
       let attempt = 0;
       while (
         attempt < 3 &&
-        (!result.success && /in progress|temporarily|network|timeout/i.test(result.message || ''))
+        (!res.ok || (!result.success && /in progress|temporarily|network|timeout/i.test(result.message || '')))
       ) {
         attempt += 1;
         await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
-        result = await verifyTransaction(reference, undefined, idToken);
+        res = await apiFetch(`/payments/verify?reference=${reference}`, { method: 'GET' });
+        result = await res.json();
       }
-      if (!result.success || !result.metadata) {
-          throw new Error(result.message || 'Payment verification failed at provider.');
+      
+      if (!result.success) {
+          throw new Error(result.message || result.detail || 'Payment verification failed at provider.');
       }
 
       const metadata = typeof result.metadata === 'string' ? JSON.parse(result.metadata) : result.metadata;

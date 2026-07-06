@@ -105,3 +105,25 @@ build.log
 
 .vercel
 .env*
+pyrightconfig.json
+.turbo/
+
+# Markdown files
+*.md
+!README.md
+
+# Test artifacts, scripts, and mocks
+tests/
+__tests__/
+__mocks__/
+*.test.ts
+*.test.js
+*.test.tsx
+*.spec.ts
+*.spec.js
+*.spec.tsx
+test_*.py
+*_test.py
+fixtures/
+mock_data/
+__fixtures__/

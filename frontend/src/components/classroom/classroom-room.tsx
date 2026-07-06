@@ -29,7 +29,7 @@ import {
   unpinClassroomMessage,
   getClassroomUserProfile,
   repairMyClassroomAccess,
-} from '@/app/actions/classroom';
+} from '@/lib/classroom-api';
 import { getPresignedDownloadUrl, getPresignedUploadUrl } from '@/app/actions/storage';
 import { createLiveSession, getZoomJoinUrl } from '@/app/actions/zoom';
 import { aiTutorChat } from '@/ai/flows/ai-tutor-chat';

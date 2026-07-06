@@ -1,19 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const routeMocks = vi.hoisted(() => {
-  const getMock = vi.fn();
-  const docMock = vi.fn(() => ({ get: getMock }));
-  const collectionMock = vi.fn(() => ({ doc: docMock }));
+  const apiFetchServerMock = vi.fn();
   const notFound = vi.fn(() => {
-    const error = new Error('NEXT_NOT_FOUND');
+    const error = new Error('NEXT_HTTP_ERROR_FALLBACK;404');
     (error as Error & { digest: string }).digest = 'NEXT_HTTP_ERROR_FALLBACK;404';
     throw error;
   });
 
   return {
-    getMock,
-    docMock,
-    collectionMock,
+    apiFetchServerMock,
     notFound,
   };
 });
@@ -22,10 +18,8 @@ vi.mock('next/navigation', () => ({
   notFound: routeMocks.notFound,
 }));
 
-vi.mock('@/firebase/admin', () => ({
-  adminDb: {
-    collection: routeMocks.collectionMock,
-  },
+vi.mock('@/lib/api-client.server', () => ({
+  apiFetchServer: routeMocks.apiFetchServerMock,
 }));
 
 vi.mock('./course-detail-client', () => ({
@@ -43,31 +37,32 @@ describe('course/[id] public route', () => {
   });
 
   it('returns notFound when course document does not exist', async () => {
-    routeMocks.getMock.mockResolvedValueOnce({
-      exists: false,
-      data: () => undefined,
+    routeMocks.apiFetchServerMock.mockResolvedValueOnce({
+      ok: false,
+      status: 404,
+      statusText: 'Not Found',
     });
 
     await expect(
       CourseDetailPage({ params: Promise.resolve({ id: 'missing-course' }) })
-    ).rejects.toThrow('NEXT_NOT_FOUND');
+    ).rejects.toThrow('NEXT_HTTP_ERROR_FALLBACK;404');
   });
 
   it('returns notFound when course is not publicly readable', async () => {
-    routeMocks.getMock.mockResolvedValueOnce({
-      exists: true,
-      data: () => ({ status: 'Draft' }),
+    routeMocks.apiFetchServerMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ course: { status: 'Draft' } }),
     });
 
     await expect(
       CourseDetailPage({ params: Promise.resolve({ id: 'draft-course' }) })
-    ).rejects.toThrow('NEXT_NOT_FOUND');
+    ).rejects.toThrow('NEXT_HTTP_ERROR_FALLBACK;404');
   });
 
   it('renders course detail client when status is Published', async () => {
-    routeMocks.getMock.mockResolvedValueOnce({
-      exists: true,
-      data: () => ({ status: 'Published' }),
+    routeMocks.apiFetchServerMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ course: { status: 'Published' } }),
     });
 
     const result = await CourseDetailPage({ params: Promise.resolve({ id: 'pub-course' }) });
@@ -76,9 +71,9 @@ describe('course/[id] public route', () => {
   });
 
   it('renders course detail client when status is lowercase published', async () => {
-    routeMocks.getMock.mockResolvedValueOnce({
-      exists: true,
-      data: () => ({ status: 'published' }),
+    routeMocks.apiFetchServerMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ course: { status: 'published' } }),
     });
 
     const result = await CourseDetailPage({ params: Promise.resolve({ id: 'pub-course-lower' }) });

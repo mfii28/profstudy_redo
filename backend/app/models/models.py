@@ -12,6 +12,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import JSONB, ARRAY
+from pgvector.sqlalchemy import Vector
 
 
 class Base(DeclarativeBase):
@@ -322,6 +323,19 @@ class CourseRagSource(Base):
         UniqueConstraint("courseId", "sourceFile"),
     )
 
+class CourseRagChunk(Base):
+    __tablename__ = "CourseRagChunk"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    courseId: Mapped[str] = mapped_column(String, ForeignKey("Course.id", ondelete="CASCADE"))
+    sourceId: Mapped[str] = mapped_column(String, ForeignKey("CourseRagSource.id", ondelete="CASCADE"))
+    chunkIndex: Mapped[int] = mapped_column(Integer)
+    text: Mapped[str] = mapped_column(Text)
+    embedding = mapped_column(Vector(768))
+    createdAt: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    source = relationship("CourseRagSource")
+
 
 class PlatformSettings(Base):
     __tablename__ = "platformSettings"
@@ -406,5 +420,36 @@ class Coupon(Base):
     usedCount: Mapped[int] = mapped_column(Integer, default=0)
     courseId: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     expiresAt: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    createdAt: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updatedAt: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+
+
+
+class Payout(Base):
+    __tablename__ = "Payout"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    tutorId: Mapped[str] = mapped_column(String, ForeignKey("User.id", ondelete="CASCADE"))
+    date: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    amount: Mapped[float] = mapped_column(Float)
+    method: Mapped[str] = mapped_column(String)
+    status: Mapped[str] = mapped_column(String, default="pending")
+    createdAt: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updatedAt: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+
+
+
+class IpBlock(Base):
+    __tablename__ = "IpBlock"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    ip: Mapped[str] = mapped_column(String, unique=True)
+    reason: Mapped[str] = mapped_column(Text)
+    blockedBy: Mapped[str] = mapped_column(String)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     createdAt: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updatedAt: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
