@@ -17,6 +17,102 @@ router = APIRouter()
 
 ADMIN_ROLES = ("admin", "superadmin", "subadmin")
 
+# ── RBAC: Roles & Permissions (stored in PlatformSettings) ──────────────
+
+@router.get("/roles")
+async def list_roles(
+    current_user: Dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all custom roles (admin only)."""
+    await _require_admin(current_user, db)
+    result = await db.execute(
+        select(PlatformSettings).where(PlatformSettings.id == "roles")
+    )
+    row = result.scalar_one_or_none()
+    roles = row.settings if row and row.settings else []
+    # Always include built-in roles
+    built_in = [{"id": "admin", "name": "Admin", "permissions": ["*"]},
+                {"id": "superadmin", "name": "Super Admin", "permissions": ["*"]},
+                {"id": "subadmin", "name": "Sub Admin", "permissions": ["dashboard:view:main", "users:read", "courses:read"]},
+                {"id": "tutor", "name": "Tutor", "permissions": ["courses:create", "courses:edit", "students:read"]},
+                {"id": "student", "name": "Student", "permissions": ["courses:enroll", "courses:read"]}]
+    return {"roles": roles + built_in}
+
+
+@router.post("/roles")
+async def create_role(
+    data: Dict,
+    current_user: Dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create or update a custom role (admin only)."""
+    await _require_admin(current_user, db)
+    result = await db.execute(
+        select(PlatformSettings).where(PlatformSettings.id == "roles")
+    )
+    row = result.scalar_one_or_none()
+    roles = list(row.settings) if row and row.settings else []
+    # Update existing or append new
+    role_id = data.get("id", f"role_{len(roles)+1}")
+    existing = next((r for r in roles if r.get("id") == role_id), None)
+    if existing:
+        existing.update(data)
+    else:
+        roles.append({**data, "id": role_id})
+    if row:
+        row.settings = roles
+    else:
+        db.add(PlatformSettings(id="roles", settings=roles))
+    await db.flush()
+    return {"success": True}
+
+
+@router.get("/permissions")
+async def list_permissions(
+    current_user: Dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all available permissions (admin only)."""
+    await _require_admin(current_user, db)
+    permissions = [
+        {"id": "*", "name": "Full Access"},
+        {"id": "dashboard:view:main", "name": "View Main Dashboard"},
+        {"id": "dashboard:view:analytics", "name": "View Analytics"},
+        {"id": "users:read", "name": "Read Users"},
+        {"id": "users:write", "name": "Create/Edit Users"},
+        {"id": "users:delete", "name": "Delete Users"},
+        {"id": "courses:read", "name": "Read Courses"},
+        {"id": "courses:create", "name": "Create Courses"},
+        {"id": "courses:edit", "name": "Edit Courses"},
+        {"id": "courses:approve", "name": "Approve Courses"},
+        {"id": "courses:delete", "name": "Delete Courses"},
+        {"id": "students:read", "name": "Read Students"},
+        {"id": "finance:read", "name": "Read Finance"},
+        {"id": "finance:write", "name": "Manage Finance"},
+        {"id": "settings:read", "name": "Read Settings"},
+        {"id": "settings:write", "name": "Manage Settings"},
+    ]
+    return {"permissions": permissions}
+
+
+@router.get("/users/{user_id}/permissions")
+async def get_user_permissions(
+    user_id: str,
+    current_user: Dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get effective permissions for a user (admin only)."""
+    await _require_admin(current_user, db)
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    role = user.role or "student"
+    if role in ("admin", "superadmin"):
+        return {"permissions": ["*"]}
+    return {"permissions": ["dashboard:view:main", "users:read", "courses:read"]}
+
 
 async def _require_admin(current_user: Dict, db: AsyncSession):
     """Check if the current user has an admin role.

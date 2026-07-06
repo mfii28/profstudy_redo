@@ -693,6 +693,32 @@ export const adminDb = {
 } as any;
 
 export const adminAuth = {
+  getUser: async (uid: string) => {
+    const user = await prisma.user.findUnique({ where: { id: uid } });
+    if (!user) throw new Error(`User not found: ${uid}`);
+    return {
+      uid: user.id,
+      email: user.email,
+      displayName: user.name,
+      customClaims: { role: user.role, emailVerified: user.emailVerified },
+      emailVerified: user.emailVerified,
+      toJSON: () => ({ uid: user.id, email: user.email }),
+    };
+  },
+
+  getUserByEmail: async (email: string) => {
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) throw new Error(`User not found: ${email}`);
+    return {
+      uid: user.id,
+      email: user.email,
+      displayName: user.name,
+      customClaims: { role: user.role, emailVerified: user.emailVerified },
+      emailVerified: user.emailVerified,
+      toJSON: () => ({ uid: user.id, email: user.email }),
+    };
+  },
+
   verifyIdToken: async (token: string) => {
     if (!token || token === 'nextauth-token-placeholder') {
       return { uid: 'dev-user-id' };

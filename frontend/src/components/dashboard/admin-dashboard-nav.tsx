@@ -186,19 +186,10 @@ export function AdminDashboardNav({ profile }: { profile?: UserProfile }) {
                         </div>
                     );
 
-                    const NavItemWrapper = ({ children }: { children: React.ReactNode }) => (
-                        <TooltipProvider delayDuration={0}>
-                            <Tooltip>
-                                <TooltipTrigger asChild>{children}</TooltipTrigger>
-                                <TooltipContent side="right" className="flex items-center gap-4">
-                                    {item.name}
-                                </TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
-                    );
-
                     return (
-                        <NavItemWrapper key={itemIndex}>
+                        <TooltipProvider key={itemIndex} delayDuration={0}>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
                             {item.subItems ? (
                                 <Collapsible open={openItems[item.name] || false} onOpenChange={(isOpen) => handleOpenChange(item.name, isOpen)}>
                                     <CollapsibleTrigger asChild>
@@ -228,7 +219,12 @@ export function AdminDashboardNav({ profile }: { profile?: UserProfile }) {
                                     {NavItemContent}
                                 </Link>
                             )}
-                        </NavItemWrapper>
+                                </TooltipTrigger>
+                                <TooltipContent side="right" className="flex items-center gap-4">
+                                    {item.name}
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
                     )
                 })}
             </div>
