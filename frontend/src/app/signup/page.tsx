@@ -431,7 +431,13 @@ export default function SignupPage() {
                 inputMode="tel"
                 placeholder="+233 20 123 4567"
                 value={phoneNumber}
-                onChange={(e) => setPhoneNumber(e.target.value)}
+                onChange={(e) => {
+                  let val = e.target.value;
+                  if (val.startsWith('0')) {
+                    val = '+233' + val.substring(1);
+                  }
+                  setPhoneNumber(val);
+                }}
                 onBlur={handlePhoneBlur}
                 error={phoneError}
                 required={true}

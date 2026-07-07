@@ -67,9 +67,22 @@ export default function LoginPage() {
     setIsLoading(true);
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-      // Let the onAuthStateChanged in provider.tsx handle the redirect, or we can push manually
-      router.replace('/dashboard'); // Generic dashboard route that redirects to the role specific dashboard
+      const userCredential = await signInWithPopup(auth, provider);
+      const user = userCredential.user;
+      
+      const idTokenResult = await user.getIdTokenResult();
+      const role = idTokenResult.claims.role || 'student';
+
+      // Set cookie for FastAPI proxy compatibility
+      const secure = window.location.protocol === 'https:' ? 'Secure;' : '';
+      const sessionToken = await user.getIdToken(true);
+      document.cookie = `__session=${sessionToken}; path=/; max-age=3600; SameSite=Lax; ${secure}`;
+
+      toast({
+        title: 'Login Successful',
+        description: 'Redirecting to your dashboard...',
+      });
+      router.replace(getRoleDashboardPath(role as string));
     } catch (error: any) {
       toast({ variant: 'destructive', title: 'Google Login Failed', description: error.message });
       setIsLoading(false);
