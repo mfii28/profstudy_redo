@@ -1,0 +1,109 @@
+src/app/admin/login/page.tsx(45,56): error TS2345: Argument of type '{}' is not assignable to parameter of type 'string'.
+src/app/admin/security/page.tsx(72,25): error TS2339: Property 'users' does not exist on type '{ telemetry: null; error: string; }'.
+src/app/admin/security/page.tsx(73,29): error TS2339: Property 'blocklist' does not exist on type '{ telemetry: null; error: string; }'.
+src/app/admin/security/page.tsx(74,32): error TS2339: Property 'failedOrders' does not exist on type '{ telemetry: null; error: string; }'.
+src/app/admin/security/page.tsx(98,23): error TS2339: Property 'ok' does not exist on type '{ error: string; }'.
+src/app/admin/security/page.tsx(116,42): error TS2339: Property 'block' does not exist on type '{ error: string; }'.
+src/app/admin/security/page.tsx(134,21): error TS2339: Property 'ok' does not exist on type '{ error: string; }'.
+src/app/admin/settings/communications/page.tsx(28,67): error TS2307: Cannot find module '@/lib/communications' or its corresponding type declarations.
+src/app/admin/settings/communications/page.tsx(329,32): error TS2339: Property 'smsConfigured' does not exist on type '{ status: string; }'.
+src/app/admin/settings/communications/page.tsx(330,25): error TS2339: Property 'smsKeySource' does not exist on type '{ status: string; }'.
+src/app/admin/settings/communications/page.tsx(330,49): error TS2339: Property 'smsKeyLength' does not exist on type '{ status: string; }'.
+src/app/admin/settings/communications/page.tsx(408,67): error TS2339: Property 'smsConfigured' does not exist on type '{ status: string; }'.
+src/app/admin/settings/communications/page.tsx(411,30): error TS2339: Property 'smsSenderConfigured' does not exist on type '{ status: string; }'.
+src/app/admin/settings/communications/page.tsx(411,60): error TS2339: Property 'smsSenderValid' does not exist on type '{ status: string; }'.
+src/app/admin/settings/communications/page.tsx(413,26): error TS2339: Property 'smsSenderError' does not exist on type '{ status: string; }'.
+src/app/admin/settings/communications/page.tsx(414,30): error TS2339: Property 'smsSenderError' does not exist on type '{ status: string; }'.
+src/app/admin/settings/communications/page.tsx(415,30): error TS2339: Property 'smsSenderId' does not exist on type '{ status: string; }'.
+src/app/admin/settings/communications/page.tsx(416,58): error TS2339: Property 'smsSenderId' does not exist on type '{ status: string; }'.
+src/app/admin/settings/communications/page.tsx(422,30): error TS2339: Property 'whatsappConfigured' does not exist on type '{ status: string; }'.
+src/app/admin/settings/communications/page.tsx(424,26): error TS2339: Property 'whatsappConfigured' does not exist on type '{ status: string; }'.
+src/app/admin/settings/communications/page.tsx(425,41): error TS2339: Property 'whatsappKeySource' does not exist on type '{ status: string; }'.
+src/app/admin/settings/communications/page.tsx(425,70): error TS2339: Property 'whatsappKeyLength' does not exist on type '{ status: string; }'.
+src/app/admin/settings/communications/page.tsx(431,30): error TS2339: Property 'whatsappSenderConfigured' does not exist on type '{ status: string; }'.
+src/app/admin/settings/communications/page.tsx(432,32): error TS2339: Property 'whatsappSenderConfigured' does not exist on type '{ status: string; }'.
+src/app/admin/settings/communications/page.tsx(436,30): error TS2339: Property 'genericApiKeyConfigured' does not exist on type '{ status: string; }'.
+src/app/admin/settings/communications/page.tsx(441,30): error TS2339: Property 'jobsSecretConfigured' does not exist on type '{ status: string; }'.
+src/app/admin/settings/communications/page.tsx(448,20): error TS2339: Property 'smsBalance' does not exist on type '{ status: string; }'.
+src/app/admin/settings/communications/page.tsx(449,79): error TS2339: Property 'smsBalance' does not exist on type '{ status: string; }'.
+src/app/admin/settings/communications/page.tsx(504,21): error TS2339: Property 'smsConfigured' does not exist on type '{ status: string; }'.
+src/app/admin/settings/communications/page.tsx(511,34): error TS2339: Property 'smsConfigured' does not exist on type '{ status: string; }'.
+src/app/admin/settings/communications/page.tsx(511,59): error TS2339: Property 'smsSenderValid' does not exist on type '{ status: string; }'.
+src/app/admin/settings/communications/page.tsx(518,34): error TS2339: Property 'whatsappConfigured' does not exist on type '{ status: string; }'.
+src/app/admin/settings/communications/page.tsx(628,26): error TS2339: Property 'smsConfigured' does not exist on type '{ status: string; }'.
+src/app/admin/settings/communications/page.tsx(629,25): error TS2339: Property 'smsSenderValid' does not exist on type '{ status: string; }'.
+src/app/admin/settings/communications/page.tsx(645,26): error TS2339: Property 'smsConfigured' does not exist on type '{ status: string; }'.
+src/app/admin/settings/communications/page.tsx(646,25): error TS2339: Property 'smsSenderValid' does not exist on type '{ status: string; }'.
+src/app/admin/settings/email/page.tsx(162,91): error TS2339: Property 'sentTo' does not exist on type '{ error: string; success?: undefined; count?: undefined; sentCount?: undefined; failedCount?: undefined; } | { success: boolean; count: number; sentCount: number; failedCount: number; error?: undefined; }'.
+  Property 'sentTo' does not exist on type '{ error: string; success?: undefined; count?: undefined; sentCount?: undefined; failedCount?: undefined; }'.
+src/app/complete-profile/page.tsx(25,21): error TS2339: Property 'isValid' does not exist on type 'boolean'.
+src/app/complete-profile/page.tsx(25,44): error TS2339: Property 'normalized' does not exist on type 'boolean'.
+src/app/complete-profile/page.tsx(26,94): error TS2339: Property 'error' does not exist on type 'boolean'.
+src/app/complete-profile/page.tsx(33,57): error TS2339: Property 'normalized' does not exist on type 'boolean'.
+src/app/signup/page.tsx(48,19): error TS2339: Property 'isValid' does not exist on type 'Promise<{ valid: boolean; }>'.
+src/app/signup/page.tsx(48,42): error TS2339: Property 'sanitized' does not exist on type 'Promise<{ valid: boolean; }>'.
+src/app/signup/page.tsx(53,39): error TS2339: Property 'sanitized' does not exist on type 'Promise<{ valid: boolean; }>'.
+src/app/signup/page.tsx(171,26): error TS2339: Property 'isValid' does not exist on type 'Promise<{ valid: boolean; }>'.
+src/app/signup/page.tsx(171,52): error TS2339: Property 'sanitized' does not exist on type 'Promise<{ valid: boolean; }>'.
+src/app/signup/page.tsx(172,41): error TS2339: Property 'sanitized' does not exist on type 'Promise<{ valid: boolean; }>'.
+src/app/signup/page.tsx(185,36): error TS2339: Property 'isValid' does not exist on type 'boolean'.
+src/app/signup/page.tsx(186,32): error TS2339: Property 'error' does not exist on type 'boolean'.
+src/app/signup/page.tsx(187,27): error TS2339: Property 'normalized' does not exist on type 'boolean'.
+src/app/signup/page.tsx(187,52): error TS2339: Property 'normalized' does not exist on type 'boolean'.
+src/app/signup/page.tsx(188,33): error TS2339: Property 'normalized' does not exist on type 'boolean'.
+src/app/signup/page.tsx(202,21): error TS2339: Property 'isValid' does not exist on type 'Promise<{ valid: boolean; }>'.
+src/app/signup/page.tsx(203,39): error TS2339: Property 'error' does not exist on type 'Promise<{ valid: boolean; }>'.
+src/app/signup/page.tsx(229,36): error TS2339: Property 'isValid' does not exist on type 'Promise<{ valid: boolean; }>'.
+src/app/signup/page.tsx(229,63): error TS2339: Property 'error' does not exist on type 'Promise<{ valid: boolean; }>'.
+src/app/signup/page.tsx(251,21): error TS2339: Property 'isValid' does not exist on type 'boolean'.
+src/app/signup/page.tsx(252,32): error TS2339: Property 'error' does not exist on type 'boolean'.
+src/app/signup/page.tsx(253,87): error TS2339: Property 'error' does not exist on type 'boolean'.
+src/app/signup/page.tsx(261,21): error TS2339: Property 'isValid' does not exist on type 'Promise<{ valid: boolean; }>'.
+src/app/signup/page.tsx(262,39): error TS2339: Property 'error' does not exist on type 'Promise<{ valid: boolean; }>'.
+src/app/signup/page.tsx(263,94): error TS2339: Property 'error' does not exist on type 'Promise<{ valid: boolean; }>'.
+src/app/signup/page.tsx(266,32): error TS2339: Property 'normalized' does not exist on type 'Promise<{ valid: boolean; }>'.
+src/app/signup/page.tsx(270,36): error TS2339: Property 'isValid' does not exist on type 'Promise<{ valid: boolean; }>'.
+src/app/signup/page.tsx(271,34): error TS2339: Property 'error' does not exist on type 'Promise<{ valid: boolean; }>'.
+src/app/signup/page.tsx(272,84): error TS2339: Property 'error' does not exist on type 'Promise<{ valid: boolean; }>'.
+src/app/signup/page.tsx(304,36): error TS2339: Property 'normalized' does not exist on type 'boolean'.
+src/app/signup/page.tsx(306,53): error TS2339: Property 'isValid' does not exist on type 'Promise<{ valid: boolean; }>'.
+src/app/signup/page.tsx(306,73): error TS2339: Property 'sanitized' does not exist on type 'Promise<{ valid: boolean; }>'.
+src/app/student-dashboard/ai-assistant/page.tsx(48,41): error TS2307: Cannot find module '@/ai/schemas/exam-practice' or its corresponding type declarations.
+src/app/student-dashboard/ai-assistant/page.tsx(327,47): error TS2554: Expected 0 arguments, but got 1.
+src/app/student-dashboard/ai-assistant/page.tsx(334,28): error TS2339: Property 'flashcards' does not exist on type '{}'.
+src/app/student-dashboard/ai-assistant/page.tsx(343,26): error TS2339: Property 'flashcards' does not exist on type '{}'.
+src/app/student-dashboard/ai-assistant/page.tsx(366,46): error TS2554: Expected 0 arguments, but got 1.
+src/app/student-dashboard/ai-assistant/page.tsx(373,24): error TS2339: Property 'items' does not exist on type '{}'.
+src/app/student-dashboard/ai-assistant/page.tsx(379,23): error TS2339: Property 'items' does not exist on type '{}'.
+src/app/student-dashboard/ai-assistant/page.tsx(384,65): error TS2339: Property 'items' does not exist on type '{}'.
+src/app/student-dashboard/ai-assistant/page.tsx(406,20): error TS2339: Property 'score' does not exist on type '{ grade: number; feedback: string; }'.
+src/app/student-dashboard/ai-assistant/page.tsx(407,24): error TS2339: Property 'isCorrect' does not exist on type '{ grade: number; feedback: string; }'.
+src/app/student-dashboard/settings/security/page.tsx(69,36): error TS2339: Property 'updateUser' does not exist on type '{ user: null; }'.
+src/app/student-dashboard/settings/security/page.tsx(105,36): error TS2339: Property 'signOut' does not exist on type '{ user: null; }'.
+src/app/tutor-dashboard/payouts/page.tsx(117,28): error TS2339: Property 'error' does not exist on type '{ success: boolean; }'.
+src/app/tutor-dashboard/payouts/page.tsx(118,88): error TS2339: Property 'error' does not exist on type '{ success: boolean; }'.
+src/app/tutor-dashboard/settings/security/page.tsx(64,36): error TS2339: Property 'signOut' does not exist on type '{ user: null; }'.
+src/app/verify-email/page.tsx(39,31): error TS2339: Property 'currentUser' does not exist on type '{ user: null; }'.
+src/app/verify-email/page.tsx(88,33): error TS2339: Property 'currentUser' does not exist on type '{ user: null; }'.
+src/components/classroom/classroom-overview.tsx(229,34): error TS2339: Property 'studentName' does not exist on type '{ error: string; }'.
+src/components/classroom/classroom-overview.tsx(250,32): error TS2339: Property 'updatedAt' does not exist on type 'never'.
+src/components/classroom/classroom-overview.tsx(250,47): error TS2339: Property 'createdAt' does not exist on type 'never'.
+src/components/classroom/classroom-overview.tsx(251,32): error TS2339: Property 'updatedAt' does not exist on type 'never'.
+src/components/classroom/classroom-overview.tsx(251,47): error TS2339: Property 'createdAt' does not exist on type 'never'.
+src/components/classroom/classroom-overview.tsx(269,17): error TS2339: Property 'enrolledStudentIds' does not exist on type 'never'.
+src/components/classroom/classroom-overview.tsx(515,60): error TS2339: Property 'added' does not exist on type '{ error: string; }'.
+src/components/classroom/classroom-overview.tsx(1157,122): error TS2339: Property 'targetEmail' does not exist on type 'never'.
+src/components/classroom/classroom-overview.tsx(1157,148): error TS2339: Property 'targetUserId' does not exist on type 'never'.
+src/components/classroom/classroom-overview.tsx(1160,65): error TS2339: Property 'userEnrolledInArray' does not exist on type 'never'.
+src/components/classroom/classroom-overview.tsx(1161,54): error TS2339: Property 'enrollmentIndexHasMember' does not exist on type 'never'.
+src/components/classroom/classroom-overview.tsx(1162,60): error TS2339: Property 'classroomExists' does not exist on type 'never'.
+src/components/classroom/classroom-overview.tsx(1163,73): error TS2339: Property 'classroomHasEnrolledField' does not exist on type 'never'.
+src/components/classroom/classroom-overview.tsx(1164,59): error TS2339: Property 'classroomHasMember' does not exist on type 'never'.
+src/components/classroom/classroom-overview.tsx(1165,75): error TS2339: Property 'rulesWouldAllowMessageReadByMembership' does not exist on type 'never'.
+src/components/classroom/classroom-overview.tsx(1175,29): error TS2339: Property 'repairAttempted' does not exist on type 'never'.
+src/components/classroom/classroom-overview.tsx(1177,33): error TS2339: Property 'repairSucceeded' does not exist on type 'never'.
+src/components/classroom/classroom-overview.tsx(1183,29): error TS2339: Property 'rootCauseFlags' does not exist on type 'never'.
+src/components/classroom/classroom-overview.tsx(1186,33): error TS2339: Property 'rootCauseFlags' does not exist on type 'never'.
+src/components/classroom/classroom-overview.tsx(1193,86): error TS2339: Property 'recommendation' does not exist on type 'never'.
+src/components/classroom/classroom-overview.tsx(1211,95): error TS2339: Property 'repairAttempted' does not exist on type 'never'.
+src/components/classroom/classroom-overview.tsx(1211,125): error TS2339: Property 'repairSucceeded' does not exist on type 'never'.

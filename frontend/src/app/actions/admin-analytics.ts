@@ -3,9 +3,10 @@
 import { apiFetchServer } from '@/lib/api-client.server';
 import { logger } from '@/lib/logging';
 
-export async function getAdminAnalyticsOverview(timeRange: '7d' | '30d' | '90d' | 'all') {
+export async function getAdminAnalyticsOverview(idToken?: string, timeRange: '7d' | '30d' | '90d' | 'all' = '30d') {
   try {
-    return await apiFetchServer(`/api/v1/admin/analytics/overview?timeRange=${timeRange}`);
+    const res = await apiFetchServer(`/api/v1/admin/analytics/overview?timeRange=${timeRange}`);
+    return res.json();
   } catch (error: any) {
     logger.error('[Admin Analytics] Failed to load overview', { error: error.message });
     return {

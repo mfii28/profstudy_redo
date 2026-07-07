@@ -5,7 +5,8 @@ import { logger } from '@/lib/logging';
 
 export async function getSecurityTelemetry() {
   try {
-    return await apiFetchServer('/api/v1/admin/security/telemetry');
+    const res = await apiFetchServer('/api/v1/admin/security/telemetry');
+    return res.json();
   } catch (error: any) {
     logger.error('[Admin Security] Failed to fetch telemetry', { error: error.message });
     return { users: [], failedOrders: [], blocklist: [], error: 'Failed to load telemetry' };
@@ -14,10 +15,11 @@ export async function getSecurityTelemetry() {
 
 export async function blockIpAddress(ip: string, reason: string) {
   try {
-    return await apiFetchServer('/api/v1/admin/security/block-ip', {
+    const res = await apiFetchServer('/api/v1/admin/security/block-ip', {
       method: 'POST',
       body: JSON.stringify({ ip, reason }),
     });
+    return res.json();
   } catch (error: any) {
     logger.error('[Admin Security] Failed to block IP', { error: error.message });
     throw new Error('Failed to block IP');
@@ -26,9 +28,10 @@ export async function blockIpAddress(ip: string, reason: string) {
 
 export async function unblockIpAddress(blockId: string) {
   try {
-    return await apiFetchServer(`/api/v1/admin/security/block-ip/${blockId}`, {
+    const res = await apiFetchServer(`/api/v1/admin/security/block-ip/${blockId}`, {
       method: 'DELETE',
     });
+    return res.json();
   } catch (error: any) {
     logger.error('[Admin Security] Failed to unblock IP', { error: error.message });
     throw new Error('Failed to unblock IP');
