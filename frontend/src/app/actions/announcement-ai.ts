@@ -13,8 +13,8 @@ export async function refineAnnouncementForAdmin(text: string, tone: string = 'P
       method: 'POST',
       body: JSON.stringify({ text, tone }),
     });
-    
-    return { result: res.result };
+    const data = await res.json();
+    return { result: data.result };
   } catch (error: any) {
     logger.error('[Announcement AI] Failed to refine announcement', { error: error.message });
     return { error: error.message || 'Failed to refine announcement.' };
@@ -27,8 +27,8 @@ export async function generateSecurityAlertForAdmin(incidentType: string) {
       method: 'POST',
       body: JSON.stringify({ incidentType: incidentType.trim() || 'suspicious login patterns and potential account sharing' }),
     });
-    
-    return { result: res.result };
+    const data = await res.json();
+    return { result: data.result };
   } catch (error: any) {
     logger.error('[Announcement AI] Failed to generate security alert', { error: error.message });
     return { error: error.message || 'Failed to generate security alert.' };

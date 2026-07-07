@@ -5,7 +5,8 @@ import { type GlobalSettings, defaultGlobalSettings } from '@/lib/platform-setti
 
 export async function getGlobalSettingsAction(forceRefresh = false): Promise<GlobalSettings> {
   try {
-    const data = await apiFetchServer('/api/v1/admin/settings/master-config');
+    const res = await apiFetchServer('/api/v1/admin/settings/master-config');
+    const data = await res.json();
     if (data && data.settings) {
       return { ...defaultGlobalSettings, ...data.settings };
     }

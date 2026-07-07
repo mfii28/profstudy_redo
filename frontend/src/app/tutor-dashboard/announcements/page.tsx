@@ -16,7 +16,7 @@ import { useUser } from "@/firebase";
 import { type Course, type Announcement } from "@/lib/db";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { refineAnnouncement, generateSecurityAlert } from '@/ai/flows/announcement-generator';
+import { refineAnnouncementForAdmin, generateSecurityAlertForAdmin } from '@/app/actions/announcement-ai';
 import { saveAnnouncement, deleteAnnouncement, updateAnnouncement, subscribeToAnnouncements } from '@/lib/marketing-data';
 import { notifyEnrolledStudents } from '@/app/actions/session';
 
@@ -80,10 +80,14 @@ export default function AnnouncementsPage() {
         if (!message.trim()) return;
         setIsAiLoading(true);
         try {
-            const result = await refineAnnouncement({ text: message, tone: 'Professional' });
-            setMessage(result.message);
-            if (result.subject) setSubject(result.subject);
-            toast({ title: "AI Refinement Applied", description: "Your message has been professionally polished." });
+            const result = await refineAnnouncementForAdmin(message, 'Professional');
+            if (result.error) {
+                toast({ variant: 'destructive', title: "AI Error", description: result.error });
+            } else {
+                setMessage(result.result.message);
+                if (result.result.subject) setSubject(result.result.subject);
+                toast({ title: "AI Refinement Applied", description: "Your message has been professionally polished." });
+            }
         } catch (error) {
             toast({ variant: 'destructive', title: "AI Error", description: "Could not connect to the refinement engine." });
         } finally {
@@ -94,13 +98,17 @@ export default function AnnouncementsPage() {
     const handleAiSecurityAlert = async () => {
         setIsAiLoading(true);
         try {
-            const result = await generateSecurityAlert({ incidentType: 'suspicious login patterns and potential account sharing' });
-            setMessage(result.message);
-            if (result.subject) setSubject(result.subject);
-            toast({ 
-                title: "Security Alert Generated", 
-                description: "A standard high-priority warning has been drafted for your students." 
-            });
+            const result = await generateSecurityAlertForAdmin('suspicious login patterns and potential account sharing');
+            if (result.error) {
+                toast({ variant: 'destructive', title: "AI Error", description: result.error });
+            } else {
+                setMessage(result.result.message);
+                if (result.result.subject) setSubject(result.result.subject);
+                toast({ 
+                    title: "Security Alert Generated", 
+                    description: "A standard high-priority warning has been drafted for your students." 
+                });
+            }
         } catch (error) {
             toast({ variant: 'destructive', title: "AI Error" });
         } finally {

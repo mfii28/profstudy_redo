@@ -6,12 +6,10 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BrainCircuit, Loader2, Sparkles } from "lucide-react";
-import { type Course } from "@/lib/db";
+import { type Course, type QuizQuestion } from "@/lib/db";
 import { useState, useEffect } from "react";
 import { getCoursesByIds } from "@/lib/course-data";
-import { generateQuiz } from "@/ai/flows/dynamic-quiz-generation-flow";
-import { DynamicQuizGenerationOutput } from "@/ai/schemas/dynamic-quiz-generation-flow";
-import { aiTutorChat } from "@/ai/flows/ai-tutor-chat";
+import { generateQuizFromText } from "@/app/actions/quiz-generation";
 import { useToast } from "@/hooks/use-toast";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { cn } from "@/lib/utils";
@@ -28,7 +26,7 @@ export default function AiQuizGeneratorPage() {
   const [numQuestions, setNumQuestions] = useState('5');
   const [difficulty, setDifficulty] = useState<'Easy' | 'Medium' | 'Hard' | 'Expert'>('Medium');
   const [isLoading, setIsLoading] = useState(false);
-  const [generatedQuiz, setGeneratedQuiz] = useState<DynamicQuizGenerationOutput | null>(null);
+  const [generatedQuiz, setGeneratedQuiz] = useState<{ quiz: QuizQuestion[] } | null>(null);
   const [userAnswers, setUserAnswers] = useState<Record<number, number>>({});
   const [submitted, setSubmitted] = useState(false);
   const [weakAreaAnalysis, setWeakAreaAnalysis] = useState<string | null>(null);
@@ -85,13 +83,17 @@ export default function AiQuizGeneratorPage() {
             return;
         }
 
-        const result = await generateQuiz({
+        const result = await generateQuizFromText(
             lessonContent,
-            topic: topic || course.title,
-            numberOfQuestions: parseInt(numQuestions) || 5,
-            difficulty,
-        });
-        setGeneratedQuiz(result);
+            topic || course.title,
+            parseInt(numQuestions) || 5
+        );
+        if (result.error) {
+            throw new Error(result.error);
+        }
+        if (result.questions) {
+            setGeneratedQuiz({ quiz: result.questions });
+        }
     } catch (error) {
         console.error("Failed to generate quiz", error);
         toast({
@@ -112,30 +114,7 @@ export default function AiQuizGeneratorPage() {
     setSubmitted(true);
   }
 
-  const handleAnalyzeWeakAreas = async () => {
-    if (!generatedQuiz || !currentUser) return;
-    setIsAnalyzing(true);
-    try {
-      const wrongAnswers = generatedQuiz.quiz
-        .map((q, index) => ({ question: q.questionText, userAnswer: q.options[userAnswers[index]] || 'No answer', correctAnswer: q.options[q.correctAnswerIndex], explanation: q.explanation }))
-        .filter((_, index) => userAnswers[index] !== generatedQuiz.quiz[index].correctAnswerIndex);
 
-      if (wrongAnswers.length === 0) {
-        setWeakAreaAnalysis('Perfect score! You demonstrated strong understanding across all topics.');
-        setIsAnalyzing(false);
-        return;
-      }
-
-      const prompt = `Analyze these incorrect quiz answers and identify specific weak areas the student needs to review. Be encouraging but direct. List 2-3 specific topics to revise with brief tips.\n\nWrong answers:\n${wrongAnswers.map((w, i) => `${i + 1}. Q: ${w.question}\n   Student answered: ${w.userAnswer}\n   Correct: ${w.correctAnswer}\n   Why: ${w.explanation}`).join('\n\n')}`;
-
-      const result = await aiTutorChat({ question: prompt, courseMaterial: '', persona: 'Exam Coach' });
-      setWeakAreaAnalysis(result.answer);
-    } catch {
-      toast({ variant: 'destructive', title: 'Could not analyze weak areas.' });
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
 
   const getScore = () => {
     if (!generatedQuiz) return 0;
@@ -254,18 +233,7 @@ export default function AiQuizGeneratorPage() {
                 ) : (
                     <>
                         <div className="text-xl font-bold">Your Score: {getScore()}%</div>
-                        {!weakAreaAnalysis && (
-                            <Button variant="outline" onClick={handleAnalyzeWeakAreas} disabled={isAnalyzing} className="gap-2">
-                                {isAnalyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 text-accent" />}
-                                Analyze Weak Areas
-                            </Button>
-                        )}
-                        {weakAreaAnalysis && (
-                            <div className="w-full p-4 rounded-xl bg-accent/5 border border-accent/20 animate-in fade-in duration-500">
-                                <p className="text-xs font-bold text-accent uppercase tracking-wider mb-2">AI Weak Area Analysis</p>
-                                <p className="text-sm text-muted-foreground whitespace-pre-wrap">{weakAreaAnalysis}</p>
-                            </div>
-                        )}
+
                     </>
                 )}
             </CardFooter>

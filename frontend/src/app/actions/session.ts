@@ -26,7 +26,8 @@ export async function notifyEnrolledStudents(
       method: 'POST',
       body: JSON.stringify({ courseId, title, message }),
     });
-    return { notified: res.notifiedCount || 0 };
+    const data = await res.json();
+    return { notified: data.notifiedCount || 0 };
   } catch (error: any) {
     return { error: error.message || 'Failed to send notifications.' };
   }

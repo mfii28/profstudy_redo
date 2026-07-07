@@ -16,8 +16,8 @@ export async function generateQuizFromText(
             method: 'POST',
             body: JSON.stringify({ text, topic, questionCount }),
         });
-        
-        return { questions: result.quiz };
+        const data = await result.json();
+        return { questions: data.quiz };
     } catch (err: any) {
         logger.error('[Quiz AI] Text generation failed', { error: err.message });
         return { error: err.message || 'AI quiz generation failed.' };
@@ -37,8 +37,8 @@ export async function generateQuizFromFile(
             method: 'POST',
             body: JSON.stringify({ fileBase64: base64, mimeType, topic, questionCount }),
         });
-        
-        return { questions: result.quiz };
+        const data = await result.json();
+        return { questions: data.quiz };
     } catch (err: any) {
         logger.error('[Quiz AI] File generation failed', { error: err.message });
         return { error: err.message || 'AI quiz generation from file failed.' };

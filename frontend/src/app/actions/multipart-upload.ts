@@ -4,10 +4,11 @@ import { apiFetchServer } from '@/lib/api-client.server';
 
 export async function initiateMultipartUpload(key: string, contentType: string, idToken?: string) {
   try {
-    return await apiFetchServer('/api/v1/storage/multipart/initiate', {
+    const res = await apiFetchServer('/api/v1/storage/multipart/initiate', {
       method: 'POST',
       body: JSON.stringify({ key, contentType }),
     });
+    return res.json();
   } catch (err: any) {
     return { error: 'Failed to initiate upload. Please try again.' };
   }
@@ -15,10 +16,11 @@ export async function initiateMultipartUpload(key: string, contentType: string, 
 
 export async function getPresignedPartUrls(key: string, uploadId: string, partCount: number, idToken?: string) {
   try {
-    return await apiFetchServer('/api/v1/storage/multipart/urls', {
+    const res = await apiFetchServer('/api/v1/storage/multipart/urls', {
       method: 'POST',
       body: JSON.stringify({ key, uploadId, partCount }),
     });
+    return res.json();
   } catch (err: any) {
     return { error: 'Failed to generate part URLs. Please try again.' };
   }

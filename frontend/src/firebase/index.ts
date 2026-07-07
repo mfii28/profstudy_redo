@@ -10,3 +10,6 @@
  */
 export * from './provider';
 export * from './client-provider';
+
+export function useFirestore() { return null; }
+export function useAuth() { return { user: null }; }

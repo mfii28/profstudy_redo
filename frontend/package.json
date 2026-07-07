@@ -64,7 +64,7 @@
     "dompurify": "^3.3.3",
     "dotenv": "^16.5.0",
     "embla-carousel-react": "^8.6.0",
-    "firebase": "^12.15.0",
+    "firebase": "^10.14.1",
     "framer-motion": "^11.3.2",
     "jsonwebtoken": "^9.0.2",
     "llm-chunk": "^0.0.1",

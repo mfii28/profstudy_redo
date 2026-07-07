@@ -212,6 +212,7 @@ export default function AdminManualEnrollmentPage() {
       return;
     }
     setIsLoading(true);
+    try {
       const res = await apiFetch('/admin/enrollments/bulk-enroll', {
         method: 'POST',
         body: JSON.stringify({

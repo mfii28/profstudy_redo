@@ -5,7 +5,8 @@ import type { Payout, SubscriptionPlan, Order, BillingHistory, OrderStatus } fro
 
 export async function getPayoutsAction(): Promise<Payout[]> {
   try {
-    return await apiFetchServer('/api/v1/admin/finance/payouts');
+    const res = await apiFetchServer('/api/v1/admin/finance/payouts');
+    return res.json();
   } catch {
     return [];
   }
@@ -14,7 +15,8 @@ export async function getPayoutsAction(): Promise<Payout[]> {
 export async function getPayoutsByTutorIdAction(tutorId: string): Promise<Payout[]> {
   if (!tutorId) return [];
   try {
-    return await apiFetchServer(`/api/v1/admin/finance/payouts/tutor/${tutorId}`);
+    const res = await apiFetchServer(`/api/v1/admin/finance/payouts/tutor/${tutorId}`);
+    return res.json();
   } catch {
     return [];
   }
@@ -22,7 +24,8 @@ export async function getPayoutsByTutorIdAction(tutorId: string): Promise<Payout
 
 export async function getSubscriptionPlansAction(): Promise<SubscriptionPlan[]> {
   try {
-    return await apiFetchServer('/api/v1/admin/finance/subscription-plans');
+    const res = await apiFetchServer('/api/v1/admin/finance/subscription-plans');
+    return res.json();
   } catch {
     return [];
   }
@@ -44,7 +47,8 @@ export async function deleteSubscriptionPlanAction(planId: string): Promise<void
 export async function getOrdersAction(userId?: string): Promise<Order[]> {
   try {
     const query = userId ? `?user_id=${userId}` : '';
-    return await apiFetchServer(`/api/v1/admin/finance/orders${query}`);
+    const res = await apiFetchServer(`/api/v1/admin/finance/orders${query}`);
+    return res.json();
   } catch {
     return [];
   }
@@ -84,7 +88,8 @@ export async function updatePayoutStatusAction(payoutId: string, status: Payout[
 
 export async function getCommissionSettingsAction(): Promise<{ defaultRate: number; overrides: any[] }> {
   try {
-    return await apiFetchServer('/api/v1/admin/finance/commission-config');
+    const res = await apiFetchServer('/api/v1/admin/finance/commission-config');
+    return res.json();
   } catch {
     return { defaultRate: 20, overrides: [] };
   }

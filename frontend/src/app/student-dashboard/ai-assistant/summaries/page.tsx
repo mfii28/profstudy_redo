@@ -6,7 +6,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { FileText, Loader2, Sparkles } from "lucide-react";
 import { useState } from "react";
-import { summarizeLessonContent } from "@/ai/flows/lesson-content-summarization";
 import { useToast } from "@/hooks/use-toast";
 import { useStudentProfile } from "@/hooks/use-student-profile";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -19,40 +18,10 @@ function AiSummariesPage() {
   const { toast } = useToast();
 
   const handleGenerateSummary = async () => {
-    if (!content.trim()) {
-        toast({
-            variant: "destructive",
-            title: "Content is empty",
-            description: "Please paste some content to summarize."
-        });
-        return;
-    }
-    if (!user || !profile) return;
-
-    setIsLoading(true);
-    setSummary('');
-
-    try {
-        const result = await summarizeLessonContent(
-            {
-                type: "document",
-                documentText: content,
-            },
-            {
-                requesterUid: user.uid,
-            }
-        );
-        setSummary(result.summary);
-    } catch (error) {
-        console.error("Failed to generate summary", error);
-         toast({
-            variant: "destructive",
-            title: "AI Error",
-            description: "Failed to generate the summary. Please try again."
-        });
-    } finally {
-        setIsLoading(false);
-    }
+    toast({
+        title: "Feature Upgrade",
+        description: "AI Summaries are currently being migrated to the new backend. Check back soon!"
+    });
   }
   
   if (isUserLoading || !user || !profile) {

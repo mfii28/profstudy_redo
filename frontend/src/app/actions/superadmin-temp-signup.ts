@@ -4,7 +4,8 @@ import { apiFetchServer } from '@/lib/api-client.server';
 
 export async function isTempSuperadminSignupEnabled(): Promise<boolean> {
   try {
-    const data = await apiFetchServer('/api/v1/admin/settings/superadmin-temp-signup');
+    const res = await apiFetchServer('/api/v1/admin/settings/superadmin-temp-signup');
+    const data = await res.json();
     if (data && data.settings) {
       return typeof data.settings.enabled === 'boolean' ? data.settings.enabled : true;
     }

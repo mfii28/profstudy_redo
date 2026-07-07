@@ -32,7 +32,8 @@ export async function getTutorStudents(
     
     if (cursor) query.append('cursor', cursor);
 
-    const data = await apiFetchServer(`/api/v1/tutor/students?${query.toString()}`);
+    const res = await apiFetchServer(`/api/v1/tutor/students?${query.toString()}`);
+    const data = await res.json();
     
     return {
       students: data.students || [],

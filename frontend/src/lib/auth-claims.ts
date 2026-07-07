@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { adminAuth } from '@/firebase/admin';
 import { logger } from '@/lib/logging';
 

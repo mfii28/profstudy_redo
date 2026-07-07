@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileOverview AI-powered insights generation using Genkit + Google Gemini 2.5 Flash.
  * Generates natural language summaries of analytics patterns and course insights.

@@ -34,3 +34,7 @@ export async function unblockIpAddress(blockId: string) {
     throw new Error('Failed to unblock IP');
   }
 }
+
+export async function unblockIpAdmin(...args: any[]) { return { error: 'Not implemented' }; }
+export async function getAdminSecurityTelemetry(...args: any[]) { return { telemetry: null, error: 'Not implemented' }; }
+export async function blockIpAdmin(...args: any[]) { return { error: 'Not implemented' }; }

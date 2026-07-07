@@ -23,7 +23,8 @@ export async function broadcastAnnouncementNotification(input: BroadcastAnnounce
         targetUserId: input.targetUserId,
       }),
     });
-    return { success: true, notifiedCount: res.notifiedCount || 0 };
+    const data = await res.json();
+    return { success: true, notifiedCount: data.notifiedCount || 0 };
   } catch (error: any) {
     logger.error('[Announcement Notification] Broadcast failed', { error: error.message });
     return { error: error.message || 'Failed to broadcast notifications.' };

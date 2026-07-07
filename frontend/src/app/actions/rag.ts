@@ -18,11 +18,11 @@ export async function ingestCourseRagFromText(
   text: string,
 ) {
   try {
-    const data = await apiFetchServer(`/api/v1/rag/course/${courseId}/ingest-text`, {
+    const res = await apiFetchServer(`/api/v1/rag/course/${courseId}/ingest-text`, {
       method: 'POST',
       body: JSON.stringify({ sourceLabel, text }),
     });
-    return data;
+    return res.json();
   } catch (error: any) {
     return { ok: false, error: error.message || 'Failed to ingest text.' };
   }
@@ -35,11 +35,11 @@ export async function ingestCourseRagFile(
   fileKey: string,
 ) {
   try {
-    const data = await apiFetchServer(`/api/v1/rag/course/${courseId}/ingest-file`, {
+    const res = await apiFetchServer(`/api/v1/rag/course/${courseId}/ingest-file`, {
       method: 'POST',
       body: JSON.stringify({ sourceLabel, fileKey }),
     });
-    return data;
+    return res.json();
   } catch (error: any) {
     return { ok: false, error: error.message || 'Failed to ingest file.' };
   }
@@ -48,7 +48,8 @@ export async function ingestCourseRagFile(
 export async function getCourseMarkdownText(courseId: string, idToken?: string): Promise<string> {
   try {
     const key = `private/courses/${courseId}/rag/materials.md`;
-    const data = await apiFetchServer(`/api/v1/storage/download-url?key=${encodeURIComponent(key)}`);
+    const res = await apiFetchServer(`/api/v1/storage/download-url?key=${encodeURIComponent(key)}`);
+    const data = await res.json();
     if (!data.url) return '';
     
     const fileRes = await fetch(data.url);
@@ -67,10 +68,11 @@ export async function retrieveCourseChunksForStudent(
   idToken?: string,
 ): Promise<RetrievedChunk[]> {
   try {
-    const data = await apiFetchServer(`/api/v1/rag/course/${courseId}/retrieve`, {
+    const res = await apiFetchServer(`/api/v1/rag/course/${courseId}/retrieve`, {
       method: 'POST',
       body: JSON.stringify({ query, top_k: topK }),
     });
+    const data = await res.json();
     if (data.chunks && Array.isArray(data.chunks)) {
       return data.chunks as RetrievedChunk[];
     }
@@ -86,8 +88,8 @@ export async function getCourseRagStatsForStudent(
   idToken?: string,
 ) {
   try {
-    const data = await apiFetchServer(`/api/v1/rag/course/${courseId}/stats`);
-    return data;
+    const res = await apiFetchServer(`/api/v1/rag/course/${courseId}/stats`);
+    return res.json();
   } catch {
     return null;
   }
@@ -98,7 +100,8 @@ export async function getCourseRagStatsForStaff(
   idToken: string,
 ) {
   try {
-    const data = await apiFetchServer(`/api/v1/rag/course/${courseId}/stats`);
+    const res = await apiFetchServer(`/api/v1/rag/course/${courseId}/stats`);
+    const data = await res.json();
     return { ok: true, stats: data };
   } catch (error: any) {
     return { ok: false, error: error.message || 'Failed to fetch RAG stats.' };

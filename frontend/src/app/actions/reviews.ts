@@ -55,7 +55,7 @@ export async function submitReview(input: SubmitReviewInput, idToken: string) {
   }
 
   try {
-    const data = await apiFetchServer(`/api/v1/reviews/`, {
+    const res = await apiFetchServer(`/api/v1/reviews/`, {
       method: 'POST',
       body: JSON.stringify({
         courseId: input.courseId,
@@ -63,6 +63,7 @@ export async function submitReview(input: SubmitReviewInput, idToken: string) {
         text: input.text,
       }),
     });
+    const data = await res.json();
     return { success: true, reviewId: data.id };
   } catch (error: any) {
     return { error: error.message || 'Failed to submit review. Please try again.' };
