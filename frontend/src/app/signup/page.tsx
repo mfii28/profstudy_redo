@@ -19,6 +19,7 @@ import {
   validateStudentRegistrationNumber,
   validateAffiliateLink,
 } from '@/lib/signup-validation';
+import { getAuthErrorMessage } from '@/lib/auth-errors';
 
 function sanitizeReferralId(rawReferralId: string | null): string | null {
   const normalizedReferralId = rawReferralId?.trim();
@@ -337,7 +338,7 @@ export default function SignupPage() {
 
       router.replace(`/verify-email?uid=${user.uid}`);
     } catch (error: any) {
-      toast({ variant: 'destructive', title: 'Signup Failed', description: error.message || 'An unexpected error occurred.' });
+      toast({ variant: 'destructive', title: 'Signup Failed', description: getAuthErrorMessage(error) });
       setIsLoading(false);
     }
   };
@@ -349,7 +350,7 @@ export default function SignupPage() {
       await signInWithPopup(auth, provider);
       router.replace('/dashboard');
     } catch (error: any) {
-      toast({ variant: 'destructive', title: 'Google Signup Failed', description: error.message });
+      toast({ variant: 'destructive', title: 'Google Signup Failed', description: getAuthErrorMessage(error) });
       setIsLoading(false);
     }
   };

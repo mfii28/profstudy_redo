@@ -194,7 +194,13 @@ export default function AffiliateDashboardPage() {
         </CardHeader>
         <CardContent className="space-y-3">
           {history.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No activity yet. Share your referral link from your profile or signup flow.</p>
+            <div className="py-8 flex flex-col items-center justify-center text-center">
+              <History className="h-10 w-10 text-muted-foreground/30 mb-3" />
+              <h3 className="text-lg font-semibold mb-1">No activity yet</h3>
+              <p className="text-sm text-muted-foreground max-w-sm">
+                Share your referral link from your profile or signup flow to start earning cashback!
+              </p>
+            </div>
           ) : (
             <ul className="space-y-2">
               {history.map((entry) => (

@@ -44,41 +44,46 @@ async def get_user_achievements(
     )
     order_count = order_count_result or 0
 
-    # Generate achievement badges
-    if enrollment_count >= 1:
-        achievements.append({
+    # Define all possible achievements
+    all_achievements = [
+        {
             "id": "first_course",
             "title": "First Steps",
             "description": "Enrolled in your first course",
             "icon": "🎓",
-            "unlockedAt": datetime.utcnow().isoformat(),
-        })
-
-    if enrollment_count >= 5:
-        achievements.append({
+            "condition": enrollment_count >= 1
+        },
+        {
             "id": "five_courses",
             "title": "Eager Learner",
             "description": "Enrolled in 5 courses",
             "icon": "📚",
-            "unlockedAt": datetime.utcnow().isoformat(),
-        })
-
-    if review_count >= 1:
-        achievements.append({
+            "condition": enrollment_count >= 5
+        },
+        {
             "id": "first_review",
             "title": "Voice Your Opinion",
             "description": "Wrote your first review",
             "icon": "✍️",
-            "unlockedAt": datetime.utcnow().isoformat(),
-        })
-
-    if order_count >= 1:
-        achievements.append({
+            "condition": review_count >= 1
+        },
+        {
             "id": "first_purchase",
             "title": "First Purchase",
             "description": "Made your first purchase",
             "icon": "🛒",
-            "unlockedAt": datetime.utcnow().isoformat(),
+            "condition": order_count >= 1
+        }
+    ]
+
+    for ach in all_achievements:
+        achievements.append({
+            "id": ach["id"],
+            "title": ach["title"],
+            "description": ach["description"],
+            "icon": ach["icon"],
+            "isUnlocked": ach["condition"],
+            "date": datetime.utcnow().isoformat() if ach["condition"] else None,
         })
 
     return {"achievements": achievements}

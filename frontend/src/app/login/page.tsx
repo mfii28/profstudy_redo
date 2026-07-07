@@ -20,6 +20,7 @@ import { auth } from '@/firebase/client';
 import { signInWithEmailAndPassword, sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { Loader2, Eye, EyeOff } from 'lucide-react';
 import { getRoleDashboardPath } from '@/lib/auth-verification';
+import { getAuthErrorMessage } from '@/lib/auth-errors';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -57,7 +58,7 @@ export default function LoginPage() {
       toast({
         variant: 'destructive',
         title: 'Login Failed',
-        description: error.message || 'An unexpected error occurred.',
+        description: getAuthErrorMessage(error),
       });
       setIsLoading(false);
     }
@@ -84,7 +85,7 @@ export default function LoginPage() {
       });
       window.location.href = getRoleDashboardPath(role as string);
     } catch (error: any) {
-      toast({ variant: 'destructive', title: 'Google Login Failed', description: error.message });
+      toast({ variant: 'destructive', title: 'Google Login Failed', description: getAuthErrorMessage(error) });
       setIsLoading(false);
     }
   };
@@ -110,7 +111,7 @@ export default function LoginPage() {
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: error.message || 'Could not send reset email. Please try again.',
+        description: getAuthErrorMessage(error),
       });
     } finally {
       setIsResetting(false);
