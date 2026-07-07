@@ -7,6 +7,7 @@ import {
   saveSubscriptionPlanAction,
   deleteSubscriptionPlanAction,
   getOrdersAction,
+  getUserOrdersAction,
   updateOrderStatusAction,
   getBillingHistoryAction,
   updatePayoutStatusAction,
@@ -36,6 +37,10 @@ export const deleteSubscriptionPlan = (planId: string): void => {
 };
 
 export const getOrders = async (userId?: string): Promise<Order[]> => {
+  if (!userId) {
+    // Or we could always use getUserOrdersAction if the student is calling it for themselves
+    return getUserOrdersAction();
+  }
   return getOrdersAction(userId);
 };
 

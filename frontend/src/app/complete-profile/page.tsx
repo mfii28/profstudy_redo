@@ -54,7 +54,19 @@ export default function CompleteProfilePage() {
           <form onSubmit={handleSave} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="phone">Phone number</Label>
-              <Input id="phone" type="tel" required value={phone} onChange={(e) => setPhone(e.target.value)} />
+              <Input 
+                id="phone" 
+                type="tel" 
+                required 
+                value={phone} 
+                onChange={(e) => {
+                  let val = e.target.value;
+                  if (val.startsWith('0')) {
+                    val = '+233' + val.substring(1);
+                  }
+                  setPhone(val);
+                }} 
+              />
             </div>
             <Button type="submit" disabled={isSaving}>{isSaving ? 'Saving...' : 'Save and continue'}</Button>
           </form>

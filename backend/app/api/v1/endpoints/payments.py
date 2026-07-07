@@ -509,3 +509,17 @@ async def paystack_webhook(
         await db.flush()
             
     return {"status": "success"}
+
+@router.get("/orders")
+async def get_user_orders(
+    current_user: Dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get all orders for the currently authenticated user.
+    """
+    uid = current_user["id"]
+    query = select(Order).where(Order.userId == uid).order_by(Order.createdAt.desc())
+    result = await db.execute(query)
+    orders = result.scalars().all()
+    return orders

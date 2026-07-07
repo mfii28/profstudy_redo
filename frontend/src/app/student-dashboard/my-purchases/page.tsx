@@ -75,7 +75,7 @@ export default function MyPurchasesPage() {
     const loadOrders = async () => {
       setIsLoading(true);
       try {
-        const rawOrders = await getOrders(user.uid);
+        const rawOrders = (await getOrders(user.uid)) || [];
 
         // Enrich each order with course metadata
         const enriched = await Promise.all(

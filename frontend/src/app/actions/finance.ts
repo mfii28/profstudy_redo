@@ -54,6 +54,16 @@ export async function getOrdersAction(userId?: string): Promise<Order[]> {
   }
 }
 
+export async function getUserOrdersAction(): Promise<Order[]> {
+  try {
+    const res = await apiFetchServer(`/api/v1/payments/orders`);
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
 export async function updateOrderStatusAction(orderId: string, status: OrderStatus): Promise<void> {
   await apiFetchServer(`/api/v1/admin/finance/orders/${orderId}/status`, {
     method: 'PATCH',
@@ -63,7 +73,7 @@ export async function updateOrderStatusAction(orderId: string, status: OrderStat
 
 export async function getBillingHistoryAction(userId?: string): Promise<BillingHistory[]> {
   try {
-    const orders = await getOrdersAction(userId);
+    const orders = userId ? await getOrdersAction(userId) : await getUserOrdersAction();
     return orders.map(o => ({
       id: o.id,
       userId: o.userId,

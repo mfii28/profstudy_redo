@@ -20,7 +20,7 @@ export function useEnrolledCourses() {
       return;
     }
 
-    if (profile.enrollments.length === 0) {
+    if (!profile.enrollments || profile.enrollments.length === 0) {
       setEnrolledCoursesWithProgress([]);
       setIsCoursesLoading(false);
       return;

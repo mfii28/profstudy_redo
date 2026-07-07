@@ -54,7 +54,8 @@ export default function OrdersPage() {
     if (!user) return;
     setIsLoading(true);
     getOrders(user.uid)
-      .then(setOrders)
+      .then((data) => setOrders(data || []))
+      .catch(() => setOrders([]))
       .finally(() => setIsLoading(false));
   }, [user]);
 

@@ -27,12 +27,12 @@ export function useStudentProfile() {
       try {
         // Bootstrap profile
         try {
-          await apiFetch('/bootstrap', { method: 'POST' });
+          await apiFetch('/users/bootstrap', { method: 'POST' });
         } catch (bootstrapErr) {
           console.warn('[StudentProfile] Bootstrap failed:', bootstrapErr);
         }
 
-        const res = await apiFetch('/profile');
+        const res = await apiFetch('/users/profile');
         const data = await res.json();
         if (!active) return;
 

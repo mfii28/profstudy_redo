@@ -52,7 +52,7 @@ export default function LoginPage() {
         title: 'Login Successful',
         description: 'Redirecting to your dashboard...',
       });
-      router.replace(getRoleDashboardPath(role as string));
+      window.location.href = getRoleDashboardPath(role as string);
     } catch (error: any) {
       toast({
         variant: 'destructive',
@@ -82,7 +82,7 @@ export default function LoginPage() {
         title: 'Login Successful',
         description: 'Redirecting to your dashboard...',
       });
-      router.replace(getRoleDashboardPath(role as string));
+      window.location.href = getRoleDashboardPath(role as string);
     } catch (error: any) {
       toast({ variant: 'destructive', title: 'Google Login Failed', description: error.message });
       setIsLoading(false);
