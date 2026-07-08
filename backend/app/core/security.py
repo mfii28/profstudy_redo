@@ -65,7 +65,14 @@ if not firebase_admin._apps:
     else:
         # Fallback to default credentials (e.g., GOOGLE_APPLICATION_CREDENTIALS env var)
         try:
-            firebase_admin.initialize_app()
+            options = {}
+            if settings.FIREBASE_PROJECT_ID:
+                options["projectId"] = settings.FIREBASE_PROJECT_ID
+            
+            if options:
+                firebase_admin.initialize_app(options=options)
+            else:
+                firebase_admin.initialize_app()
         except ValueError:
             pass # Already initialized or missing credentials (dev mode)
 
