@@ -115,7 +115,10 @@ export default function AdminDashboardLayout({
               router.replace('/student-dashboard');
             }
           } else {
-              console.error('[Admin Layout] Failed to validate profile. res.ok:', res.ok, 'data:', data);
+              console.error('[Admin Layout] Failed to validate profile. res.ok:', res.ok, 'status:', res.status, 'data:', JSON.stringify(data));
+              if (typeof window !== 'undefined') {
+                alert(`Login Failed: ${res.status} ${res.statusText}\n${JSON.stringify(data)}`);
+              }
               router.replace('/login');
           }
         } catch (err) {
