@@ -77,7 +77,14 @@ export default function AdminDashboardLayout({
         }
 
         try {
-          const res = await apiFetch('/profile');
+          // Bootstrap profile in case it was created directly in Firebase Auth
+          try {
+            await apiFetch('/users/bootstrap', { method: 'POST' });
+          } catch (bootstrapErr) {
+            console.warn('[Admin] Bootstrap failed:', bootstrapErr);
+          }
+
+          const res = await apiFetch('/users/profile');
           const data = await res.json();
           
           if (res.ok && data.success && data.user) {
@@ -104,12 +111,15 @@ export default function AdminDashboardLayout({
                 setResolvedAvatarUrl(undefined);
               }
             } else {
+              console.error('[Admin Layout] Role is not admin:', role);
               router.replace('/student-dashboard');
             }
           } else {
+              console.error('[Admin Layout] Failed to validate profile. res.ok:', res.ok, 'data:', data);
               router.replace('/login');
           }
         } catch (err) {
+          console.error('[Admin Layout] Fetch error:', err);
           const isOfflineError = !navigator.onLine;
           if (!isOfflineError) {
             // Non-offline verification error — redirect to login for safety

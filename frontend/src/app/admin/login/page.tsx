@@ -53,7 +53,7 @@ export default function AdminLoginPage() {
           title: 'Login Successful',
           description: 'Redirecting to your dashboard...',
         });
-        router.replace('/admin');
+        window.location.href = '/admin';
       } else {
         await signOut(auth);
         toast({

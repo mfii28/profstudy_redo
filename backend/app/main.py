@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends
+# Trigger auto-reload for env variables twice
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings

@@ -29,10 +29,15 @@ export async function apiFetchServer(
   // Build the full URL. API_URL should be something like:
   //   http://localhost:8000/api/v1   (local dev, from .env)
   //   https://api.example.com        (production, no prefix)
-  // If the base URL doesn't already contain /api/v1, add it.
+  let cleanPath = path;
+  if (cleanPath.startsWith('/api/v1')) {
+    cleanPath = cleanPath.substring(7); // remove '/api/v1'
+  }
+  
   const apiPrefix = API_URL.includes('/api/v1') ? '' : '/api/v1';
-  const separator = path.startsWith('/') ? '' : '/';
-  return fetch(`${API_URL}${apiPrefix}${separator}${path}`, {
+  const separator = cleanPath.startsWith('/') ? '' : '/';
+  
+  return fetch(`${API_URL}${apiPrefix}${separator}${cleanPath}`, {
     ...options,
     headers,
   });
