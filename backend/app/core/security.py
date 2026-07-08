@@ -8,6 +8,7 @@ import httpx
 import json as json_lib
 import time
 from collections import defaultdict
+import os
 
 security_scheme = HTTPBearer()
 
@@ -51,24 +52,40 @@ import firebase_admin
 from firebase_admin import credentials, auth
 from app.core.config import settings
 
+# Helper to derive Firebase project ID from available environment sources
+
+def _resolve_firebase_project_id() -> str | None:
+    if settings.FIREBASE_PROJECT_ID:
+        return settings.FIREBASE_PROJECT_ID
+    if settings.GOOGLE_CLOUD_PROJECT:
+        return settings.GOOGLE_CLOUD_PROJECT
+    return os.getenv("GOOGLE_CLOUD_PROJECT")
+
 # Initialize Firebase Admin
 if not firebase_admin._apps:
+    project_id = _resolve_firebase_project_id()
+
     if settings.FIREBASE_ADMIN_CREDENTIALS:
         try:
             import json
             cred_dict = json.loads(settings.FIREBASE_ADMIN_CREDENTIALS)
             cred = credentials.Certificate(cred_dict)
-            firebase_admin.initialize_app(cred)
+            options = {}
+            if not cred_dict.get("project_id") and project_id:
+                options["projectId"] = project_id
+            firebase_admin.initialize_app(cred, options=options or None)
         except Exception as e:
             print(f"Failed to initialize Firebase Admin with credentials string: {e}")
-            firebase_admin.initialize_app()
+            if project_id:
+                firebase_admin.initialize_app(options={"projectId": project_id})
+            else:
+                firebase_admin.initialize_app()
     else:
         # Fallback to default credentials (e.g., GOOGLE_APPLICATION_CREDENTIALS env var)
         try:
             options = {}
-            if settings.FIREBASE_PROJECT_ID:
-                options["projectId"] = settings.FIREBASE_PROJECT_ID
-            
+            if project_id:
+                options["projectId"] = project_id
             if options:
                 firebase_admin.initialize_app(options=options)
             else:

@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     # Security Settings (for verifying Firebase JWT tokens)
     FIREBASE_ADMIN_CREDENTIALS: Optional[str] = None
     FIREBASE_PROJECT_ID: Optional[str] = None
+    GOOGLE_CLOUD_PROJECT: Optional[str] = None
     
     # Cloudflare R2 Settings
     R2_ACCOUNT_ID: Optional[str] = None
