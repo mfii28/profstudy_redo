@@ -88,7 +88,7 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
         return {"id": "dev-user-id", "email": "dev@studymate.com", "role": "admin"}
 
     try:
-        decoded_token = auth.verify_id_token(token)
+        decoded_token = auth.verify_id_token(token, clock_skew_seconds=30)
         return {
             "id": decoded_token.get("uid"),
             "email": decoded_token.get("email", ""),
@@ -117,7 +117,7 @@ def get_current_user_optional(request: Request) -> Optional[Dict]:
         return {"id": "dev-user-id", "email": "dev@studymate.com", "role": "admin"}
 
     try:
-        decoded_token = auth.verify_id_token(token)
+        decoded_token = auth.verify_id_token(token, clock_skew_seconds=30)
         return {
             "id": decoded_token.get("uid"),
             "email": decoded_token.get("email", ""),

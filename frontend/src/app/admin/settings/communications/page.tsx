@@ -145,8 +145,8 @@ export default function CommunicationSettingsPage() {
           ? result.templates
           : defaultCommunicationTemplates;
       const selected = templates[templateEvent]?.[templateChannel] || defaultCommunicationTemplates[templateEvent][templateChannel];
-      setTemplateBody(selected.body);
-      setTemplateEnabled(selected.enabled);
+      setTemplateBody(selected.body ?? '');
+      setTemplateEnabled(selected.enabled ?? true);
       setTemplatesLoaded(true);
     })();
   }, [user, templateEvent, templateChannel]);
@@ -201,7 +201,7 @@ export default function CommunicationSettingsPage() {
     }
   };
 
-  const preview = templateBody.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, key: string) => previewVars[key] || '');
+  const preview = (templateBody || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, key: string) => previewVars[key] || '');
 
   const test = async (channel: 'sms' | 'whatsapp') => {
     if (!user) return;

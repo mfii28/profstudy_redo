@@ -127,3 +127,5 @@ test_*.py
 fixtures/
 mock_data/
 __fixtures__/
+/*.png
+/.playwright-mcp
